@@ -140,20 +140,38 @@ class TATRBackend(TableBackend):
         if len(rows) < 2 or len(cols) < 2:
             return None
         cells = [
-            CellBox(row=r, col=c, bbox=(cols[c][0], rows[r][0], cols[c][1], rows[r][1]))
-            for r in range(len(rows) - 1)
+            # TATR works on the crop; offset cell bboxes into full-image
+            # coordinates so assign_tokens can compare them with tokens.
+            CellBox(
+                row=r,
+                col=c,
+                bbox=(
+                    cols[c][0] + region.bbox[0],
+                    rows[r][0] + region.bbox[1],
+                    cols[c][1] + region.bbox[0],
+                    rows[r][1] + region.bbox[1],
+                ),
+            )
+            for r in range(len(rows))  # rows are detected as bands: emit the last one too
             for c in range(len(cols) - 1)
         ]
         for box in spans:  # merged cells: mark the covered grid cells' extent
             self._mark_span(box, rows, cols, cells)
-        return CellGrid(region=region, n_rows=len(rows) - 1, n_cols=len(cols) - 1, cells=cells)
+        return CellGrid(region=region, n_rows=len(rows), n_cols=len(cols) - 1, cells=cells)
 
     @staticmethod
     def _mark_span(box, rows, cols, cells: list[CellBox]) -> None:
-        r0 = max(i for i, (a, _) in enumerate(rows) if a <= box[1])
-        r1 = max(i for i, (_, b) in enumerate(rows) if b >= box[3])
-        c0 = max(i for i, (a, _) in enumerate(cols) if a <= box[0])
-        c1 = max(i for i, (_, b) in enumerate(cols) if b >= box[2])
+        # A spanning-cell box may start above all detected rows (or left of
+        # all columns): max() on an empty generator would raise ValueError.
+        # Skip the span and leave the covered cells at their default extent.
+        r0_indices = [i for i, (a, _) in enumerate(rows) if a <= box[1]]
+        r1_indices = [i for i, (_, b) in enumerate(rows) if b >= box[3]]
+        c0_indices = [i for i, (a, _) in enumerate(cols) if a <= box[0]]
+        c1_indices = [i for i, (_, b) in enumerate(cols) if b >= box[2]]
+        if not (r0_indices and r1_indices and c0_indices and c1_indices):
+            return
+        r0, r1 = max(r0_indices), max(r1_indices)
+        c0, c1 = max(c0_indices), max(c1_indices)
         for cell in cells:
             if r0 <= cell.row < r1 and c0 <= cell.col < c1:
                 cell.row_span = r1 - r0

@@ -40,8 +40,8 @@ def _gt_fields(result: ExtractionResult) -> dict[str, str]:
         cols = table.columns or []
         if not cols:
             continue
-        if table.rows:  # row 0 is the header in unified tables
-            for row in table.rows[1:]:
+        if table.rows:  # unified schema: headers live in columns, rows are data-only
+            for row in table.rows:
                 for col, cell in zip(cols, row or []):
                     if cell:
                         out[col] = str(cell)
@@ -131,8 +131,8 @@ def evaluate_seed(seed_dir: Path) -> dict[str, object]:
                 cols = table.columns or []
                 if not cols:
                     continue
-                if table.rows:
-                    for row in table.rows[1:]:
+                if table.rows:  # unified schema: headers live in columns, rows are data-only
+                    for row in table.rows:
                         for col, cell in zip(cols, row or []):
                             if cell:
                                 got[col] = str(cell)

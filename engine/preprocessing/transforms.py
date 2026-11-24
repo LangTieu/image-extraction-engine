@@ -396,7 +396,7 @@ def detect_glare(image: np.ndarray, config: GlareConfig) -> GlareResult:
 
 
 def trim_borders(image: np.ndarray, config: CropConfig) -> tuple[np.ndarray, np.ndarray]:
-    """Crop transforms return (image, affine inverse homography)."""
+    """Crop transforms return (image, post->pre homography for TransformLog.add)."""
     if config.mode == "none":
         return image, IDENTITY.copy()
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
@@ -411,13 +411,15 @@ def trim_borders(image: np.ndarray, config: CropConfig) -> tuple[np.ndarray, np.
     if not rows.any() or not cols.any():
         return image, IDENTITY.copy()
     top = max(int(np.argmax(rows)) - config.border_margin_px, 0)
-    bottom = min(int(np.argmax(rows[::-1])) + 1 + config.border_margin_px, gray.shape[0])
+    last_row = gray.shape[0] - int(np.argmax(rows[::-1])) + config.border_margin_px
+    bottom = min(last_row, gray.shape[0])
     left = max(int(np.argmax(cols)) - config.border_margin_px, 0)
-    right = min(int(np.argmax(cols[::-1])) + 1 + config.border_margin_px, gray.shape[1])
+    last_col = gray.shape[1] - int(np.argmax(cols[::-1])) + config.border_margin_px
+    right = min(last_col, gray.shape[1])
     if bottom - top < 8 or right - left < 8:
         return image, IDENTITY.copy()
     matrix = np.array([[1.0, 0.0, float(left)], [0.0, 1.0, float(top)]], dtype=np.float64)
-    return image[top:bottom, left:right], _inverse_affine(matrix)
+    return image[top:bottom, left:right], _homography_from_affine(matrix)
 
 
 def crop_region(image: np.ndarray, roi: tuple[int, int, int, int]) -> tuple[np.ndarray, np.ndarray]:
@@ -427,7 +429,7 @@ def crop_region(image: np.ndarray, roi: tuple[int, int, int, int]) -> tuple[np.n
     x, y = max(0, x), max(0, y)
     w, h = min(w, width - x), min(h, height - y)
     matrix = np.array([[1.0, 0.0, float(x)], [0.0, 1.0, float(y)]], dtype=np.float64)
-    return image[y : y + h, x : x + w], _inverse_affine(matrix)
+    return image[y : y + h, x : x + w], _homography_from_affine(matrix)
 
 
 def estimate_text_height(image: np.ndarray) -> float:

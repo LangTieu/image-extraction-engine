@@ -68,22 +68,26 @@ def score_tables(gt_tables: list[Table], got_tables: list[Table]) -> dict:
     detected = 0
     adj_f1s: list[float] = []
     content_scores: list[float] = []
+    used: set[int] = set()  # one extracted table matches at most one GT table
     for gt in gt_tables:
         if gt.bbox is None:
             continue
         gtb = (gt.bbox.x0, gt.bbox.y0, gt.bbox.x1, gt.bbox.y1)
-        match = None
-        for got in got_tables:
-            if got.bbox is None:
+        best_iou = 0.0
+        best_idx: int | None = None
+        for idx, got in enumerate(got_tables):
+            if idx in used or got.bbox is None:
                 continue
             gb = (got.bbox.x0, got.bbox.y0, got.bbox.x1, got.bbox.y1)
-            if region_iou(gtb, gb) > IOU_MATCH:
-                match = got
-                break
-        if match is None:
+            iou = region_iou(gtb, gb)
+            if iou > best_iou:
+                best_iou, best_idx = iou, idx
+        if best_idx is None or best_iou <= IOU_MATCH:
             adj_f1s.append(0.0)
             content_scores.append(0.0)
             continue
+        used.add(best_idx)
+        match = got_tables[best_idx]
         detected += 1
         gt_adj, got_adj = _adjacency_pairs(gt), _adjacency_pairs(match)
         if gt_adj or got_adj:

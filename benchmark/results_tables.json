@@ -4,28 +4,28 @@
       "detection_recall": 1.0,
       "structure_adj_f1": 1.0,
       "content_accuracy": 1.0,
-      "latency_ms_per_table": 6.770809995941818,
+      "latency_ms_per_table": 7.967003411613405,
       "n_samples": 5
     },
     "borderless": {
       "detection_recall": 1.0,
       "structure_adj_f1": 1.0,
       "content_accuracy": 1.0,
-      "latency_ms_per_table": 0.4892519908025861,
+      "latency_ms_per_table": 0.08575159590691328,
       "n_samples": 5
     },
     "tatr": {
       "detection_recall": 1.0,
       "structure_adj_f1": 1.0,
       "content_accuracy": 1.0,
-      "latency_ms_per_table": 2450.901166384574,
+      "latency_ms_per_table": 1971.8918019905686,
       "n_samples": 5
     },
     "hybrid": {
       "detection_recall": 1.0,
       "structure_adj_f1": 1.0,
       "content_accuracy": 1.0,
-      "latency_ms_per_table": 470.65954480785877,
+      "latency_ms_per_table": 564.4322867970914,
       "n_samples": 5
     }
   },
@@ -34,28 +34,28 @@
       "detection_recall": 1.0,
       "structure_adj_f1": 1.0,
       "content_accuracy": 1.0,
-      "latency_ms_per_table": 41.193339007440954,
+      "latency_ms_per_table": 41.883412399329245,
       "n_samples": 5
     },
     "borderless": {
       "detection_recall": 1.0,
       "structure_adj_f1": 1.0,
       "content_accuracy": 1.0,
-      "latency_ms_per_table": 2.7438076213002205,
+      "latency_ms_per_table": 3.1191819929517806,
       "n_samples": 5
     },
     "tatr": {
       "detection_recall": 1.0,
       "structure_adj_f1": 1.0,
       "content_accuracy": 1.0,
-      "latency_ms_per_table": 1437.3812681995332,
+      "latency_ms_per_table": 724.343568389304,
       "n_samples": 5
     },
     "hybrid": {
       "detection_recall": 1.0,
       "structure_adj_f1": 1.0,
       "content_accuracy": 1.0,
-      "latency_ms_per_table": 439.9017317977268,
+      "latency_ms_per_table": 415.63167829299346,
       "n_samples": 5
     }
   }

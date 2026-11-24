@@ -48,14 +48,15 @@ class TransformLog:
     def add(self, name: str, matrix: np.ndarray, **params: object) -> None:
         """Record a step whose matrix maps post-step coords to pre-step coords.
 
-        The cumulative matrix is H_new @ H_old so that it always maps the
+        The cumulative matrix is H_oldest @ ... @ H_newest (column-vector
+        convention: p_orig = H1 @ (H2 @ p)), so that it always maps the
         latest processed coordinates back to the original image.
         """
         matrix = np.asarray(matrix, dtype=np.float64)
         self.entries.append(
             TransformEntry(name=name, matrix=matrix, params=dict(params))  # type: ignore[arg-type]
         )
-        self._cumulative = matrix @ self._cumulative
+        self._cumulative = self._cumulative @ matrix
 
     @property
     def homography(self) -> np.ndarray:

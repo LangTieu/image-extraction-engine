@@ -33,6 +33,9 @@ class BBox(BaseModel):
     @field_validator("x1", "y1")
     @classmethod
     def _positive_extent(cls, v: float, info: Any) -> float:
+        key = "x0" if info.field_name == "x1" else "y0"
+        if v <= info.data[key]:
+            raise ValueError(f"{info.field_name} must be greater than {key}")
         return v
 
 
