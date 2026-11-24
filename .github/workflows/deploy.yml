@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths: ["service/**"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -46,8 +47,8 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/image-extraction-engine:latest
-            ghcr.io/${{ github.repository }}/image-extraction-engine:${{ github.sha }}
+            ghcr.io/langtieu/image-extraction-engine:latest
+            ghcr.io/langtieu/image-extraction-engine:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
