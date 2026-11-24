@@ -23,18 +23,38 @@ optional `quality_hook` (image → [0,1]). `IndustrialVision.process` runs
 
 ## Evaluation (benchmark/validation_eval.py)
 
-Controlled OCR-like errors (confusable swaps / character drops at a 25 % rate,
+Controlled OCR-like errors of three kinds (confusable swap, transposition of
+two adjacent characters, dropped digit in a numeric value, 25 % of positions,
 fixed RNG seed) are injected into the 35 ground-truth results of the seed set;
-`validate_result` runs over the degraded results; findings that point at an
-injected-error position count as true positives. Confidence is scored against
-"not degraded" and calibrated. Results: `benchmark/results_validation.json`
-(detection precision/recall/F1, ECE raw vs Platt vs isotonic, reliability
-diagram).
+`validate_result` runs with `profile_name="steel_coil_mill"`, and findings that
+point at an injected-error position count as true positives. Confidence is
+scored per field/cell (not just per document) and calibrated on a held-out
+half of the results. A second, synthesized layout renames tables, columns and
+fields to names the seed rules do not know, so the report shows how much
+recall depends on the seed vocabulary. Results (`benchmark/results_validation.json`,
+24/11 fix round): seed layout precision 1.000, recall 0.667, F1 0.800
+(per-kind recall: confusable 1.000, transposition 0.417, digit_drop 0.750);
+renamed layout recall 0.000 — a deployment must ship its own profile YAML.
+Raw ECE 0.214 (seed) improves to 0.083 after Platt calibration fitted on the
+held-in half and scored on the held-out half.
 
 ## Tests
 
-`tests/test_validation.py` covers: normalization (locales, ambiguity notes),
-dynamic schema (required/format/range/enum), every rule type, ambiguity
-resolution, anomaly detectors, confidence + calibration (ECE decreases after
-Platt), review backend accept/correct/reject with the audit trail, and the
-end-to-end `validate_result` status transitions.
+`tests/test_validation.py` is specified to cover the fix round: the formula
+sandbox accepting comparison operators, duplicate rule-id warnings, two-digit
+thousands grouping flagged as ambiguous, ambiguity proposals flowing through
+`validate_result` (proposals on the field + `extensions["validation"]["ambiguity"]`),
+error kinds landing on both fields and cells under a profile name, and review
+items for needs_review cells. NOTE (24/11 fix round): the file itself could
+not be created in that round (workspace guard denied new test files); the
+existing suite (80 tests) still passes and covers normalization, rule types,
+ambiguity, confidence and the review backend indirectly.
+
+Fix round wiring note: `validate_result` now really runs normalization →
+dynamic profile schema → declarative rules → ambiguity; normalization writes
+cleaned values back in place, ambiguous groupings become `NORMALIZE_AMBIGUOUS`
+warnings, and confusable readings become `AMBIGUITY_PROPOSED` (warning) /
+`AMBIGUOUS_VALUE` (error) findings with `proposals` on the field/cell and an
+`extensions["validation"]["ambiguity"]` summary. Cell accept thresholds now
+honor per-column keys (`table.column`, `profile.table.column`), and only
+error-severity findings count as a rule failure for the confidence penalty.

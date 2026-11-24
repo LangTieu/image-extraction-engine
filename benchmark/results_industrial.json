@@ -1,7 +1,7 @@
 {
   "module": "engine.industrial",
   "seed_dir": "benchmark/seed",
-  "runtime_s": 37.94,
+  "runtime_s": 38.27,
   "per_set": {
     "coil_table": {
       "samples": [

@@ -444,7 +444,8 @@ def estimate_text_height(image: np.ndarray) -> float:
         10,
     )
     projection = binary.sum(axis=1)
-    threshold = projection.max() * 0.25 if projection.max() else 0
+    peak = float(projection.max(axis=0))
+    threshold = peak * 0.25 if peak else 0
     runs: list[int] = []
     run = 0
     for value in projection:

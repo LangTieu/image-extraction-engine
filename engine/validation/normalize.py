@@ -88,7 +88,7 @@ def normalize_number(text: str, locale: LocaleConfig | None = None) -> Normalize
     elif thou in body:
         groups = body.split(thou)
         lens = {len(g) for g in groups[1:]}
-        if _INTEGER.fullmatch(groups[0]) and len(lens) == 1 and lens.pop() in (2, 3):
+        if _INTEGER.fullmatch(groups[0]) and len(lens) == 1 and lens.pop() == 3:
             body = body.replace(thou, "")  # consistent thousands grouping
         else:
             return NormalizedValue(

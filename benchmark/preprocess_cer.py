@@ -34,9 +34,9 @@ def make_panel(index: int) -> np.ndarray:
     draw = ImageDraw.Draw(img)
     for row, text in enumerate(TEXTS):
         draw.text((40, 40 + row * 80), TEXTS[(index + row) % len(TEXTS)], fill=(10, 10, 10))
-    img = np.asarray(img, dtype=np.uint8).copy()
-    cv2.rectangle(img, (6, 6), (893, 393), (0, 0, 0), 8)
-    return img
+    arr = np.asarray(img, dtype=np.uint8).copy()
+    cv2.rectangle(arr, (6, 6), (893, 393), (0, 0, 0), 8)
+    return arr
 
 
 def make_scene(kind: str, index: int) -> np.ndarray:
@@ -93,7 +93,7 @@ def cv2_rotation(image: np.ndarray, angle: float):
 
 
 def ocr_texts(image: np.ndarray) -> str:
-    from rapidocr_onnxruntime import RapidOCR
+    from rapidocr_onnxruntime import RapidOCR  # type: ignore[import-untyped]
 
     ocr = RapidOCR()
     result, _ = ocr(image)

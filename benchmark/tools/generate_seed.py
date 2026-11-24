@@ -18,6 +18,7 @@ from pathlib import Path
 from engine.schema import (
     BBox,
     ExtractionResult,
+    ExtractionStatus,
     FieldValue,
     ProcessingMeta,
     SourceInfo,
@@ -75,7 +76,7 @@ def make_result(category: str, index: int) -> ExtractionResult:
             "LENGTH",
             "PRODUCT_CODE",
         ]
-        rows = [
+        rows: list[list[str | None]] = [
             ["ZA", f"H{index:05d}", f"C{index:05d}", "1.20", "1250", "15000", "620", "SPHC"],
             ["ZA", f"H{index + 1:05d}", f"C{index + 1:05d}", "0.80", "1000", "9800", "540", "SPCC"],
         ]
@@ -116,7 +117,7 @@ def make_result(category: str, index: int) -> ExtractionResult:
         ]
     return ExtractionResult(
         document_type=category,
-        extraction_status="completed",
+        extraction_status=ExtractionStatus.COMPLETED,
         source=SourceInfo(file_name=file_name, page=1, sha256=None),
         text_blocks=blocks,
         tables=tables,
@@ -150,6 +151,7 @@ def main() -> int:
             file_name = f"{category}_{index:03d}.png"
             (image_dir / file_name).write_bytes(PNG_1X1)
             result = make_result(category, index)
+            assert result.source is not None  # make_result always sets it
             result.source.sha256 = None
             (gt_dir / f"{file_name}.json").write_text(
                 json.dumps(result.model_dump(exclude_none=True), ensure_ascii=False, indent=2)

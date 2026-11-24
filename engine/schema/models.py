@@ -77,6 +77,7 @@ class Cell(BaseModel):
     needs_review: bool = False
     validation_results: list[ValidationIssue] = []
     warnings: list[str] = []
+    proposals: list[str] = []  # ambiguity candidates when needs_review
 
 
 class Table(BaseModel):
@@ -101,6 +102,7 @@ class FieldValue(BaseModel):
     cell_ref: Cell | None = None
     needs_review: bool = False
     validation_results: list[ValidationIssue] = []
+    proposals: list[str] = []  # ambiguity candidates when needs_review
 
 
 class ProcessingMeta(BaseModel):

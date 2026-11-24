@@ -9,6 +9,8 @@ Factories change rules and thresholds by editing YAML — no code change.
 from __future__ import annotations
 
 import ast
+import fnmatch
+import logging
 import re
 from dataclasses import dataclass, field
 from importlib import resources
@@ -19,7 +21,10 @@ import yaml
 
 Severity = Literal["error", "warning", "info"]
 
-RULE_TYPES = ("range", "format", "cross_field", "uniqueness", "row_count", "unit_match")
+logger = logging.getLogger(__name__)
+
+RULE_TYPES = ("range", "format", "cross_field", "uniqueness", "row_count", "unit_match",
+              "numeric_range_any")
 
 
 @dataclass(frozen=True)
@@ -80,6 +85,12 @@ def load_rules(
             )
             if rule.type not in RULE_TYPES:
                 raise ValueError(f"{path}: unknown rule type {rule.type!r} in {rule.id}")
+            if rule.id in rules:
+                logger.warning(
+                    "duplicate rule id %r (later definition from %s wins)",
+                    rule.id,
+                    path.name,
+                )
             rules[rule.id] = rule
     return [rules[k] for k in sorted(rules)]
 
@@ -307,6 +318,56 @@ def _check_one(
                 )
         return out
 
+    if rule.type == "numeric_range_any":
+        # Name-agnostic scan: every table column (and, when scan_fields, every
+        # field) whose values mostly parse as numbers gets the [min, max]
+        # bound. This keeps catching range violations when a deployment
+        # renames its columns, unlike the seed-specific "range" rules.
+        out = []
+        lo, hi = p.get("min"), p.get("max")
+        column_glob = p.get("column_glob")
+
+        def _outside(label: str, value: float, **kw: Any) -> Finding:
+            return Finding(
+                rule.id,
+                rule.severity,
+                rule.message or f"{label}={value} outside [{lo}, {hi}]",
+                **kw,
+            )
+
+        for table_name, table in tables.items():
+            for ci, col in enumerate(table["columns"]):
+                if column_glob and not fnmatch.fnmatch(str(col), column_glob):
+                    continue
+                values = [row[ci] if ci < len(row) else None for row in table["rows"]]
+                pairs = [
+                    (ri, _as_number(v))
+                    for ri, v in enumerate(values)
+                    if _as_number(v) is not None
+                ]
+                if len(pairs) < max(1, int(0.5 * len(values))):
+                    continue  # not a numeric column
+                for ri, v in pairs:
+                    if v is None:  # narrowing for mypy; pairs guarantees not-None
+                        continue
+                    if (lo is not None and v < lo) or (hi is not None and v > hi):
+                        out.append(
+                            _outside(
+                                f"{table_name}.{col}[{ri}]",
+                                float(v),
+                                table_name=table_name,
+                                row_index=ri,
+                                col_index=ci,
+                            )
+                        )
+        if p.get("scan_fields"):
+            for name, raw in fields.items():
+                v = _as_number(raw)
+                if v is None:
+                    continue
+                if (lo is not None and v < lo) or (hi is not None and v > hi):
+                    out.append(_outside(str(name), float(v), field_name=name))
+        return out
     return [Finding(rule.id, "error", f"unhandled rule type {rule.type!r}")]
 
 
@@ -333,12 +394,17 @@ def _formula_variables(formula: str) -> list[str]:
     return sorted(set(names))
 
 
-_ALLOWED_NODES = (ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant, ast.Name,
-                  ast.Add, ast.Sub, ast.Mult, ast.Div, ast.USub, ast.UAdd, ast.Pow)
+_ALLOWED_NODES = (ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant, ast.Name, ast.Load,
+                  ast.Add, ast.Sub, ast.Mult, ast.Div, ast.USub, ast.UAdd, ast.Pow,
+                  ast.Compare, ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE)
 
 
-def _eval_formula(formula: str, variables: dict[str, float]) -> float | None:
-    """Evaluate a cross-field formula. Only arithmetic on named variables."""
+def _eval_formula(formula: str, variables: dict[str, float]) -> float | bool | None:
+    """Evaluate a cross-field formula. Only arithmetic and comparisons on
+    named variables (no calls, no attribute access). Arithmetic returns a
+    float; a comparison formula returns a bool so ``THICK >= MAX`` reads as
+    a boolean cross-check rather than being coerced to ``1.0``.
+    """
     try:
         tree = ast.parse(formula, mode="eval")
     except SyntaxError:
@@ -350,9 +416,10 @@ def _eval_formula(formula: str, variables: dict[str, float]) -> float | None:
             return None
     env = {**variables, "__builtins__": {}}  # noqa: S307 - evaluated on a whitelisted AST
     try:
-        return float(eval(compile(tree, "<formula>", "eval"), env))  # noqa: S307
+        value = eval(compile(tree, "<formula>", "eval"), env)  # noqa: S307
     except (ZeroDivisionError, OverflowError, NameError, SyntaxError):
         return None
+    return value if isinstance(value, bool) else float(value)
 
 
 def _as_number(value: Any) -> float | None:

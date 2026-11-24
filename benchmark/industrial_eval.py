@@ -46,11 +46,11 @@ def _gt_fields(result: ExtractionResult) -> dict[str, str]:
                     if cell:
                         out[col] = str(cell)
         else:
-            for cell in table.cells:
-                if cell.text and cell.row_index > 0:
-                    idx = cell.col_index
+            for c in table.cells:
+                if c.text and c.row_index > 0:
+                    idx = c.col_index
                     key = cols[idx] if idx < len(cols) else str(idx)
-                    out[key] = cell.text
+                    out[key] = c.text
     return out
 
 
@@ -120,7 +120,10 @@ def evaluate_seed(seed_dir: Path) -> dict[str, object]:
         for gt_path in sorted(gt_dir.glob("*.json")):
             gt = ExtractionResult.model_validate(json.loads(gt_path.read_text(encoding="utf-8")))
             image = _render_gt_scene(gt)
-            pred = vision.process(image, file_name=gt.source.file_name or gt_path.stem)
+            pred = vision.process(
+                image,
+                file_name=(gt.source.file_name if gt.source else None) or gt_path.stem,
+            )
 
             route_total += 1
             route_ok += int(pred.document_type == gt.document_type)
@@ -137,9 +140,9 @@ def evaluate_seed(seed_dir: Path) -> dict[str, object]:
                             if cell:
                                 got[col] = str(cell)
                 else:
-                    for cell in table.cells:
-                        if cell.text and cell.row_index > 0 and cell.col_index < len(cols):
-                            got[cols[cell.col_index]] = cell.text
+                    for c in table.cells:
+                        if c.text and c.row_index > 0 and c.col_index < len(cols):
+                            got[cols[c.col_index]] = c.text
             for name in gold:
                 overall["unit_total"] += 1
                 if name in got and got[name].strip() == gold[name].strip():

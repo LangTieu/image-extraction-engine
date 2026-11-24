@@ -34,7 +34,7 @@ rules:
       fields: [COIL_NO, COIL_ID, ID, COIL, COIL_CODE, HOT_COIL_NO, COLD_COIL_NO]
       regex: "[A-Z][0-9]{5}"
 
-  - id: COIL_NO_UNIQUE
+  - id: COIL_NO_FIELD_UNIQUE
     type: uniqueness
     severity: error
     message: "duplicate coil id in table"
@@ -54,6 +54,8 @@ rules:
       scope: fields
 
   # Table-column checks (coil_list layout in the benchmark seed).
+  # NOTE: column/table names are seed-specific on purpose; a deployment ships
+  # its own profile YAML with its real column names (see README).
   - id: NUMERIC_THICK_FORMAT
     type: format
     severity: error
@@ -90,7 +92,7 @@ rules:
       column: LENGTH
       regex: "[0-9]+(\\.[0-9]+)?"
 
-  - id: COIL_NO_UNIQUE
+  - id: COIL_NO_TABLE_UNIQUE
     type: uniqueness
     severity: error
     message: "duplicate coil id in table"
@@ -154,3 +156,14 @@ rules:
       table: coil_list
       column: PRODUCT_CODE
       regex: "[A-Z]{4}"
+  # Name-agnostic scan: bound every mostly-numeric table column (and field,
+  # via scan_fields) regardless of its name, so a renamed deployment still
+  # catches impossible measurements.
+  - id: NUMERIC_ANY_RANGE
+    type: numeric_range_any
+    severity: error
+    message: "numeric value outside plausible physical range"
+    params:
+      min: 0
+      max: 1000000
+      scan_fields: true
