@@ -1,77 +1,87 @@
 {
   "module": "engine.industrial",
   "seed_dir": "benchmark/seed",
-  "runtime_s": 19.82,
+  "runtime_s": 38.76,
   "per_set": {
     "coil_table": {
       "samples": [
         {
           "sample": "coil_table_001.png",
-          "route_ok": false,
-          "pred_type": "industrial_hmi",
+          "route_ok": true,
+          "pred_type": "coil_table",
           "gt_type": "coil_table",
           "fields_gt": 8,
-          "fields_pred": 0,
+          "fields_pred": 8,
           "warnings": [
-            "glare on screen: 7.2% of pixels blown out",
+            "screen boundary not detected; using full frame",
+            "glare on screen: 2.8% of pixels blown out",
             "possible moiré interference (score 1.00)",
-            "NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing"
+            "row 0 weight_t: 16000.0 > max 40",
+            "row 1 weight_t: 9800.0 > max 40"
           ]
         },
         {
           "sample": "coil_table_002.png",
-          "route_ok": false,
-          "pred_type": "industrial_hmi",
+          "route_ok": true,
+          "pred_type": "coil_table",
           "gt_type": "coil_table",
           "fields_gt": 8,
-          "fields_pred": 0,
+          "fields_pred": 8,
           "warnings": [
-            "glare on screen: 7.2% of pixels blown out",
+            "screen boundary not detected; using full frame",
+            "glare on screen: 2.8% of pixels blown out",
             "possible moiré interference (score 1.00)",
-            "NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing"
+            "row 0 weight_t: 16000.0 > max 40",
+            "row 1 weight_t: 9800.0 > max 40"
           ]
         },
         {
           "sample": "coil_table_003.png",
-          "route_ok": false,
-          "pred_type": "industrial_hmi",
+          "route_ok": true,
+          "pred_type": "coil_table",
           "gt_type": "coil_table",
           "fields_gt": 8,
-          "fields_pred": 0,
+          "fields_pred": 8,
           "warnings": [
-            "glare on screen: 7.2% of pixels blown out",
+            "screen boundary not detected; using full frame",
+            "glare on screen: 2.8% of pixels blown out",
             "possible moiré interference (score 1.00)",
-            "NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing"
+            "row 0 weight_t: 16000.0 > max 40",
+            "row 1 weight_t: 9800.0 > max 40"
           ]
         },
         {
           "sample": "coil_table_004.png",
-          "route_ok": false,
-          "pred_type": "industrial_hmi",
+          "route_ok": true,
+          "pred_type": "coil_table",
           "gt_type": "coil_table",
           "fields_gt": 8,
-          "fields_pred": 0,
+          "fields_pred": 8,
           "warnings": [
-            "glare on screen: 7.2% of pixels blown out",
+            "screen boundary not detected; using full frame",
+            "glare on screen: 2.8% of pixels blown out",
             "possible moiré interference (score 1.00)",
-            "NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing"
+            "row 0 weight_t: 16000.0 > max 40",
+            "row 1 weight_t: 9800.0 > max 40"
           ]
         },
         {
           "sample": "coil_table_005.png",
-          "route_ok": false,
-          "pred_type": "industrial_hmi",
+          "route_ok": true,
+          "pred_type": "coil_table",
           "gt_type": "coil_table",
           "fields_gt": 8,
-          "fields_pred": 0,
+          "fields_pred": 8,
           "warnings": [
-            "glare on screen: 7.2% of pixels blown out",
+            "screen boundary not detected; using full frame",
+            "glare on screen: 2.8% of pixels blown out",
             "possible moiré interference (score 1.00)",
-            "NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing"
+            "row 0 weight_t: 16000.0 > max 40",
+            "row 1 weight_t: 9800.0 > max 40"
           ]
         }
       ],
-      "routing_accuracy": 0.0
+      "routing_accuracy": 1.0
     },
     "industrial_hmi": {
       "samples": [
@@ -144,17 +154,17 @@
       "routing_accuracy": 1.0
     }
   },
-  "routing_accuracy": 0.5,
-  "field_precision": 0.0,
-  "field_recall": 0.0,
-  "field_f1": 0.0,
-  "unit_accuracy": 0.0,
+  "routing_accuracy": 1.0,
+  "field_precision": 1.0,
+  "field_recall": 0.875,
+  "field_f1": 0.9333333333333333,
+  "unit_accuracy": 0.875,
   "unknown_rate_flagged": 1.0,
   "counts": {
-    "tp": 0,
+    "tp": 35,
     "fp": 0,
-    "fn": 40,
-    "unit_ok": 0,
+    "fn": 5,
+    "unit_ok": 35,
     "unit_total": 40,
     "flagged": 0,
     "unknown": 0

@@ -140,7 +140,9 @@ def detect_regions(
         if area < 0.02 * width * height or area > 0.98 * width * height:
             continue
         bbox = (float(x), float(y), float(x + w), float(y + h))
-        if _is_table_like(bbox, contours, cv2.contourArea(contour)):
+        if _is_ruled_grid(edges, bbox):
+            regions.append(Region(RegionType.TABLE, bbox, score=0.6, source="heuristic"))
+        elif _is_table_like(bbox, contours, cv2.contourArea(contour)):
             regions.append(Region(RegionType.TABLE, bbox, score=0.6, source="heuristic"))
         elif any(_contains(a, bbox) for a in seen_alarm):
             continue  # inside an alarm banner already typed
@@ -157,6 +159,39 @@ def detect_regions(
         regions.extend(model_hook.detect(image))
 
     return _drop_nested(regions)
+
+
+def _is_ruled_grid(edges: np.ndarray, bbox: tuple[float, float, float, float]) -> bool:
+    """A ruled table grid: >= 2 long horizontal and >= 2 long vertical lines.
+
+    Works for both dark-lines-on-light scans and bright-lines-on-dark HMI
+    screens (the connected grid outline alone has a near-full contour fill,
+    so the hollow-rectangle test alone never fires on it).
+    """
+    x0, y0, x1, y1 = (int(v) for v in bbox)
+    w, h = x1 - x0, y1 - y0
+    if h < 8 or w < 8:
+        return False
+    crop = edges[y0:y1, x0:x1]
+    # Projection profiles: grid lines show up as rows/columns with heavy edge
+    # coverage. (Morphological dilation merges the grid into one blob, which
+    # cannot be counted.)
+    row_profile = crop.mean(axis=1) / 255.0
+    col_profile = crop.mean(axis=0) / 255.0
+    hcount = _count_bands(row_profile > 0.35)
+    vcount = _count_bands(col_profile > 0.35)
+    return hcount >= 2 and vcount >= 2
+
+
+def _count_bands(flags: np.ndarray) -> int:
+    """Number of contiguous True bands in a 1-D boolean profile."""
+    bands = 0
+    prev = False
+    for flag in flags:
+        if flag and not prev:
+            bands += 1
+        prev = flag
+    return bands
 
 
 def _is_table_like(bbox: tuple[float, float, float, float], _contours, contour_area: float) -> bool:

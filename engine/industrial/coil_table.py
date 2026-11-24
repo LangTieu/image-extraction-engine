@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from engine.industrial.profiles import IndustrialProfile
-from engine.industrial.values import parse_value_unit
+from engine.industrial.values import disambiguate, parse_value_unit
 from engine.schema import BBox, Cell, Table
 
 _COIL_HEADER_PREFIXES = ("coil", "vòng", "so", "lô", "id", "stt")
@@ -36,6 +36,8 @@ def map_row(
     headers: list[str],
     row: list[str],
     profile: IndustrialProfile | None,
+    *,
+    alternatives: dict[int, list[str]] | None = None,
 ) -> CoilRow:
     """Map one raw table row onto canonical columns with alias resolution."""
     values: dict[str, str] = {}
@@ -46,7 +48,12 @@ def map_row(
         if column is None:
             notes.append(f"unmapped header: {header!r}")
             continue
-        values[column] = raw.strip()
+        raw = raw.strip()
+        if alternatives and i in alternatives and profile is not None:
+            field_def = profile.fields.get(column)
+            if field_def is not None and field_def.format_regex:
+                raw = disambiguate(raw, alternatives[i], field_def.format_regex)
+        values[column] = raw
     return CoilRow(values=values, notes=notes)
 
 
@@ -57,10 +64,14 @@ def rows_to_table(
     profile: IndustrialProfile | None,
     *,
     bbox: tuple[float, float, float, float] | None = None,
+    resolve_headers: bool = True,
 ) -> Table:
     """Build a unified-schema Table from raw header/row strings."""
     mapped_headers = [
-        (profile.resolve_column(h) or h.strip()) if profile else h.strip() for h in headers
+        ((profile.resolve_column(h) or h.strip()) if resolve_headers else h.strip())
+        if profile
+        else h.strip()
+        for h in headers
     ]
     cells: list[Cell] = []
     for col, header in enumerate(mapped_headers):

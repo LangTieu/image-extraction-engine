@@ -45,7 +45,18 @@ def detect_screen_quad(image: np.ndarray) -> np.ndarray | None:
             best, best_area = quad, area
     if best is None:
         return None
-    return tx.order_corners(best.reshape(-1, 2).astype(float))
+    quad = tx.order_corners(best.reshape(-1, 2).astype(float))
+    # On dark-background HMI screens the OTSU "bright" mask is the text, not
+    # the screen; its dominant quad is a thin strip of text rows. A real lit
+    # screen is bright inside its boundary — reject quads whose interior is
+    # mostly dark and fall back to the full frame.
+    mask = np.zeros(gray.shape, np.uint8)
+    pts = [np.asarray(quad, dtype=np.int32)]
+    cv2.fillPoly(mask, pts, 255)  # type: ignore[call-overload]
+    inside = float(gray[mask.astype(bool)].mean()) if mask.any() else 0.0
+    if inside < 127.0:
+        return None
+    return quad
 
 
 def _moire_score(image: np.ndarray) -> float:

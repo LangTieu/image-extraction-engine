@@ -52,19 +52,52 @@ def _upscale(crop: np.ndarray, factor: float = 4.0) -> np.ndarray:
     )
 
 
-def _prep(crop: np.ndarray) -> np.ndarray:
+def _to_gray(crop: np.ndarray) -> np.ndarray:
     import cv2
 
     if crop.ndim == 2:
-        gray = crop
-    elif crop.shape[2] == 1:  # single-channel HxWx1
-        gray = crop[:, :, 0]
-    else:  # any multi-channel layout: fold to grayscale
-        gray = cv2.cvtColor(crop[..., :3], cv2.COLOR_RGB2GRAY)
+        return crop
+    if crop.shape[2] == 1:  # single-channel HxWx1
+        return crop[:, :, 0]
+    return cv2.cvtColor(crop[..., :3], cv2.COLOR_RGB2GRAY)  # any multi-channel layout
+
+
+def shallow_text(image: np.ndarray, *, upscale: float = 1.0) -> str:
+    """Whole-frame OCR for profile matching, polarity-normalized.
+
+    Unlike :func:`read_compact` this skips binarization (on full frames the
+    table grid lines dominate it and tesseract returns rules instead of
+    text) and only flips bright-on-dark HMI screens to dark-on-light.
+    """
+    import cv2
+
+    if pytesseract is None or image.size == 0:
+        return ""
+    gray = _to_gray(image)
+    norm = np.empty_like(gray)
+    cv2.normalize(gray, norm, 0, 255, cv2.NORM_MINMAX)
+    if norm.mean() < 127.5:  # dark HMI background -> invert for tesseract
+        norm = cv2.bitwise_not(norm)
+    upscaled = _upscale(norm, upscale)
+    try:
+        return pytesseract.image_to_string(upscaled)
+    except Exception:  # tesseract missing or failed on this frame
+        return ""
+
+
+def _prep(crop: np.ndarray) -> np.ndarray:
+    import cv2
+
+    gray = _to_gray(crop)
     norm = np.empty_like(gray)
     cv2.normalize(gray, norm, 0, 255, cv2.NORM_MINMAX)
     gray = norm
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Bright-on-dark (HMI/LED) text binarizes to white text on a black
+    # background; tesseract and the segment classifier expect dark ink on a
+    # light background, so invert when the background came out dark.
+    if binary.mean() < 127.5:
+        binary = cv2.bitwise_not(binary)
     return binary
 
 
@@ -123,8 +156,18 @@ def _alternatives(text: str) -> list[str]:
     if not hits:
         return []
     out = [text]
+    # whole-class swaps first: every O -> 0 etc., the common OCR systematic mix
+    for ch in dict.fromkeys(ch for _, ch in hits):
+        for alt in CONFUSABLE_ALTERNATIVES[ch]:
+            candidate = text.replace(ch, alt)
+            if candidate not in out:
+                out.append(candidate)
     for i, ch in hits[:3]:
-        out = [v[:i] + alt + v[i + 1 :] for v in out for alt in CONFUSABLE_ALTERNATIVES[ch]]
+        for v in list(out):
+            for alt in CONFUSABLE_ALTERNATIVES[ch]:
+                candidate = v[:i] + alt + v[i + 1 :]
+                if candidate not in out:
+                    out.append(candidate)
     return out[1:6]
 
 

@@ -24,8 +24,8 @@ region_templates:
 fields:
   coil_id:
     type: id
-    aliases: ["coil", "mã cuộn", "so lô", "số lô", "id"]
-    format_regex: "[A-Z]{2,4}[-][0-9]{3,6}"
+    aliases: ["coil", "mã cuộn", "so lô", "số lô", "id", "hot_coil_no", "cold_coil_no"]
+    format_regex: "[A-Z]+[0-9]+"
     seven_segment: false
   width_mm:
     type: number
@@ -49,7 +49,10 @@ table_schemas:
   coil_list:
     id_columns: ["coil_id"]
     columns:
-      coil_id: ["coil", "mã cuộn", "so lo", "số lô", "id", "stt"]
+      coil_id: ["coil", "mã cuộn", "so lo", "số lô", "id", "stt", "hot_coil_no", "cold_coil_no"]
+      zone: ["zone", "khu", "vùng"]
       width_mm: ["width", "bề rộng", "chiều rộng"]
-      thickness_mm: ["thickness", "bề dày", "độ dày"]
+      thickness_mm: ["thick", "thickness", "bề dày", "độ dày"]
       weight_t: ["weight", "trọng lượng", "khối lượng"]
+      length_mm: ["length", "chiều dài", "dài"]
+      product_code: ["product_code", "product", "mã sản phẩm"]

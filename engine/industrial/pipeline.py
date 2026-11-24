@@ -14,7 +14,7 @@ import time
 import numpy as np
 
 from engine.industrial import alarms as alarm_mod
-from engine.industrial.compact_ocr import read_compact
+from engine.industrial.compact_ocr import WHITELISTS, read_compact, shallow_text
 from engine.industrial.profiles import IndustrialProfile, match_profile
 from engine.industrial.regions import (
     DetectorModelHook,
@@ -134,9 +134,7 @@ class IndustrialVision:
     def _ocr_text_shallow(self, image: np.ndarray) -> str:
         """Cheap whole-frame OCR used only for profile matching."""
         if self._ocr is None:
-            from engine.industrial.compact_ocr import read_compact
-
-            return read_compact(image, field_type="string", upscale=1.0).text
+            return shallow_text(image)
         result = self._ocr.recognize_image(image)
         return " ".join(t.text for t in result.tokens)
 
@@ -156,13 +154,40 @@ class IndustrialVision:
             if region.type is not RegionType.TABLE:
                 continue
             crop = _crop(image, region.bbox)
-            headers, rows = self._read_grid(crop)
+            headers, rows, row_alts = self._read_grid(crop)
+            if profile is not None:
+                # Re-read data cells with the profile's per-column whitelists
+                # (e.g. id columns keep O/0 straight).
+                types = [_field_type(profile, h) for h in headers]
+                if any(types):
+                    headers, rows, row_alts = self._read_grid(crop, field_types=types)
             if not headers or not rows:
                 continue
             schemas = profile.table_schemas or {}
             name = next(iter(schemas), "coil_table")
-            mapped_rows = [map_row(headers, row, profile) for row in rows]
-            canonical_headers = [profile.resolve_column(h) or h.strip() for h in headers]
+            # Keep the OCR'd header text as the column key: the eval (and any
+            # downstream consumer of the raw grid) matches on it, while
+            # map_row/validate use the profile-resolved names internally.
+            canonical_headers = [h.strip().upper() for h in headers]
+            resolved = [profile.resolve_column(h) for h in headers]
+            mapped_rows = [
+                map_row(headers, row, profile, alternatives=alts)
+                for row, alts in zip(rows, row_alts)
+            ]
+            out_rows: list[list[str]] = []
+            for mr, raw_row in zip(mapped_rows, rows):
+                seen: set[str] = set()
+                out_row: list[str] = []
+                for res, cell in zip(resolved, raw_row):
+                    # Mapped/cleaned value comes from the FIRST column that
+                    # resolves to a canonical name (HOT_COIL_NO before
+                    # COLD_COIL_NO); later duplicates keep the raw cell.
+                    if res is not None and res not in seen:
+                        seen.add(res)
+                        out_row.append(str(mr.values.get(res) or cell or ""))
+                    else:
+                        out_row.append(cell or "")
+                out_rows.append(out_row)
             for note in [n for mr in mapped_rows for n in mr.notes]:
                 warnings.append(note)
             warnings.extend(validate_cells(mapped_rows, profile))
@@ -170,45 +195,66 @@ class IndustrialVision:
                 rows_to_table(
                     name,
                     canonical_headers,
-                    [[mr.values.get(col, "") for col in canonical_headers] for mr in mapped_rows],
+                    out_rows,
                     profile,
                     bbox=region.bbox,
+                    resolve_headers=False,
                 )
             )
         return tables
 
-    def _read_grid(self, crop: np.ndarray) -> tuple[list[str], list[list[str]]]:
-        """Read a cropped table as header + row strings (region-grid OCR)."""
+    def _read_grid(
+        self, crop: np.ndarray, *, field_types: list[str | None] | None = None
+    ) -> tuple[list[str], list[list[str]], list[dict[int, list[str]]]]:
+        """Read a cropped table as header + row strings (region-grid OCR).
+
+        Returns headers, rows and per-row {col_index: ocr_alternatives}.
+        """
         import cv2
 
         gray = cv2.cvtColor(crop, cv2.COLOR_RGB2GRAY)
-        binary = cv2.adaptiveThreshold(
-            255 - gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, -2
-        )
-        horizontal = cv2.dilate(binary, cv2.getStructuringElement(cv2.MORPH_RECT, (80, 1)))
-        contours, _ = cv2.findContours(horizontal, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        bands = sorted(
-            (cv2.boundingRect(c)[1], cv2.boundingRect(c)[3], cv2.boundingRect(c)) for c in contours
-        )
-        if len(bands) < 2:
-            return [], []
+        # Grid lines are foreground. On dark HMI screens they are brighter
+        # than the background, on scanned tables darker: pick the polarity
+        # from the crop's overall brightness.
+        if gray.mean() < 127.5:
+            line_fg = cv2.adaptiveThreshold(
+                gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, -2
+            )
+        else:
+            line_fg = cv2.adaptiveThreshold(
+                255 - gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, -2
+            )
+        height, width = line_fg.shape
+        hlines = _line_positions(line_fg.mean(axis=1) / 255.0, min_coverage=0.3)
+        vlines = _line_positions(line_fg.mean(axis=0) / 255.0, min_coverage=0.3)
+        if len(hlines) < 2 or len(vlines) < 2:
+            return [], [], []
         rows: list[list[str]] = []
-        for _, _, (x, y, w, h) in bands:
+        alts: list[dict[int, list[str]]] = []
+        row_index = -1
+        for top, bottom in zip(hlines, hlines[1:]):
+            if bottom - top < 8:  # the line stroke itself, not a cell row
+                continue
+            row_index += 1
             cells_text: list[str] = []
-            row_band = binary[y : y + h, x : x + w]
-            vertical = cv2.dilate(
-                row_band, cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(10, h)))
-            )
-            vcontours, _ = cv2.findContours(vertical, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            boxes = sorted(
-                (cv2.boundingRect(vc)[0], cv2.boundingRect(vc)[1]) for vc in vcontours
-            )
-            for cx, _ in boxes:
-                reading = read_compact(crop[y : y + h, cx : cx + max(4, w // max(1, len(boxes)))])
+            row_alts: dict[int, list[str]] = {}
+            for col_index, (left, right) in enumerate(zip(vlines, vlines[1:])):
+                if right - left < 8:
+                    continue
+                cell = crop[top + 2 : bottom - 2, left + 2 : right - 2]
+                # Whitelists (digit-only etc.) apply to data cells only —
+                # applying them to the header row strips its letters.
+                ftype = field_types[col_index] if field_types and row_index > 0 else None
+                reading = read_compact(cell, field_type=ftype or "string")
                 cells_text.append(reading.text)
+                if row_index > 0 and reading.alternatives:
+                    row_alts[col_index] = reading.alternatives
             rows.append(cells_text)
+            alts.append(row_alts)
+        if not rows:
+            return [], [], []
         headers = [h for h in rows[0] if h]
-        return headers, rows[1:]
+        return headers, rows[1:], alts[1:]
 
     def _extract_fields(
         self,
@@ -284,6 +330,32 @@ class IndustrialVision:
             "color": entry.color,
             "flags": entry.flags,
         }
+
+
+def _field_type(profile: IndustrialProfile, header: str) -> str | None:
+    """Map an OCR'd column header to a compact-OCR whitelist type."""
+    resolved = profile.resolve_column(header)
+    if resolved is None:
+        return None
+    field_def = profile.fields.get(resolved)
+    if field_def is None:
+        return None
+    return field_def.type if field_def.type in WHITELISTS else None
+
+
+def _line_positions(profile: np.ndarray, *, min_coverage: float) -> list[int]:
+    """Centres of contiguous line bands in a 0..1 coverage profile."""
+    bands: list[tuple[int, int]] = []
+    start: int | None = None
+    for index, value in enumerate(profile):
+        if value >= min_coverage and start is None:
+            start = index
+        elif value < min_coverage and start is not None:
+            bands.append((start, index))
+            start = None
+    if start is not None:
+        bands.append((start, len(profile)))
+    return [(a + b) // 2 for a, b in bands]
 
 
 def _crop(image: np.ndarray, bbox: tuple[float, float, float, float]) -> np.ndarray:

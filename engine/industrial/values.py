@@ -126,6 +126,25 @@ CONFUSABLE_ALTERNATIVES: dict[str, tuple[str, ...]] = {
 }
 
 
+def disambiguate(text: str, alternatives: list[str], format_regex: str) -> str:
+    """Pick the OCR reading that matches the field's format regex.
+
+    Ties or no-match fall back to the primary reading.
+    """
+    import re as _re
+
+    def score(candidate: str) -> tuple[int, int]:
+        matched = 1 if _re.fullmatch(format_regex, candidate) else 0
+        # tiebreak: IDs like H00002 are letters followed by a digit run;
+        # prefer candidates whose tail after the last letter is all digits.
+        tail = candidate.rstrip("0123456789")
+        clean_tail = len(candidate) - len(tail) if tail else 0
+        return (matched, clean_tail)
+
+    best = max([text, *alternatives], key=score)
+    return best if score(best)[0] else text
+
+
 def flag_confusables(text: str) -> list[str]:
     """Characters in ``text`` whose glyph class is a known OCR confusable."""
     return [ch for ch in text if ch in CONFUSABLE_ALTERNATIVES]
