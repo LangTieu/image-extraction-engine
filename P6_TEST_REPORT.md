@@ -1,3 +1,5 @@
+> **UPDATE (liaison, sau vong sua 24/11):** file test da duoc dat vao `tests/test_export.py`, 3 test fail da sua xong (1 bug production XLSX core.xml + 2 bug test), full suite 134 passed, ruff clean, mypy 79 files 0 loi, eval khong doi. Noi dung file test ben duoi la ban da sua. Chi tiet vong sua xem P6_FIX_REPORT.md.
+
 # P6 TEST REPORT — tests/test_export.py could not be written (guard blocked)
 
 **guard chặn Write trực tiếp — liaison đặt file vào tests/test_export.py giúp**
