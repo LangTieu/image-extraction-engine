@@ -1,0 +1,102 @@
+{
+  "n_results": 35,
+  "error_rate": 0.25,
+  "seed": 42,
+  "detection": {
+    "true_positives": 24,
+    "false_positives": 0,
+    "false_negatives": 1,
+    "precision": 1.0,
+    "recall": 0.96,
+    "f1": 0.9796
+  },
+  "review_rate": 0.24,
+  "n_positions": 100,
+  "calibration": {
+    "ece_raw": 0.1196,
+    "ece_platt": 0.0032,
+    "ece_isotonic": 0.119,
+    "reliability_diagram_raw": [
+      {
+        "bin_low": 0.0,
+        "bin_high": 0.1,
+        "count": 0,
+        "mean_predicted": 0.0,
+        "fraction_correct": 0.0,
+        "gap": 0.0
+      },
+      {
+        "bin_low": 0.1,
+        "bin_high": 0.2,
+        "count": 0,
+        "mean_predicted": 0.0,
+        "fraction_correct": 0.0,
+        "gap": 0.0
+      },
+      {
+        "bin_low": 0.2,
+        "bin_high": 0.30000000000000004,
+        "count": 0,
+        "mean_predicted": 0.0,
+        "fraction_correct": 0.0,
+        "gap": 0.0
+      },
+      {
+        "bin_low": 0.30000000000000004,
+        "bin_high": 0.4,
+        "count": 0,
+        "mean_predicted": 0.0,
+        "fraction_correct": 0.0,
+        "gap": 0.0
+      },
+      {
+        "bin_low": 0.4,
+        "bin_high": 0.5,
+        "count": 0,
+        "mean_predicted": 0.0,
+        "fraction_correct": 0.0,
+        "gap": 0.0
+      },
+      {
+        "bin_low": 0.5,
+        "bin_high": 0.6000000000000001,
+        "count": 0,
+        "mean_predicted": 0.0,
+        "fraction_correct": 0.0,
+        "gap": 0.0
+      },
+      {
+        "bin_low": 0.6000000000000001,
+        "bin_high": 0.7000000000000001,
+        "count": 20,
+        "mean_predicted": 0.6646128509226382,
+        "fraction_correct": 0.65,
+        "gap": 0.014612850922638199
+      },
+      {
+        "bin_low": 0.7000000000000001,
+        "bin_high": 0.8,
+        "count": 18,
+        "mean_predicted": 0.7010167308976372,
+        "fraction_correct": 0.7777777777777778,
+        "gap": 0.07676104688014063
+      },
+      {
+        "bin_low": 0.8,
+        "bin_high": 0.9,
+        "count": 0,
+        "mean_predicted": 0.0,
+        "fraction_correct": 0.0,
+        "gap": 0.0
+      },
+      {
+        "bin_low": 0.9,
+        "bin_high": 1.0,
+        "count": 62,
+        "mean_predicted": 0.9400190720949568,
+        "fraction_correct": 0.7741935483870968,
+        "gap": 0.16582552370786008
+      }
+    ]
+  }
+}

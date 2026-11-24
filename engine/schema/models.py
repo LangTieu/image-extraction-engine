@@ -60,6 +60,12 @@ class TextBlock(BaseModel):
     language: str | None = None  # BCP-47, e.g. "vi", "en"
 
 
+class ValidationIssue(BaseModel):
+    id: str
+    severity: Literal["error", "warning", "info"]
+    message: str
+
+
 class Cell(BaseModel):
     row_index: int
     col_index: int
@@ -68,6 +74,9 @@ class Cell(BaseModel):
     bbox: BBox | None = None
     text: str | None = None
     confidence: float | None = Field(default=None, ge=0, le=1)
+    needs_review: bool = False
+    validation_results: list[ValidationIssue] = []
+    warnings: list[str] = []
 
 
 class Table(BaseModel):
@@ -77,6 +86,8 @@ class Table(BaseModel):
     cells: list[Cell] = []
     bbox: BBox | None = None
     confidence: float | None = Field(default=None, ge=0, le=1)
+    needs_review: bool = False
+    validation_results: list[ValidationIssue] = []
 
 
 class FieldValue(BaseModel):
@@ -89,18 +100,13 @@ class FieldValue(BaseModel):
     bbox: BBox | None = None
     cell_ref: Cell | None = None
     needs_review: bool = False
+    validation_results: list[ValidationIssue] = []
 
 
 class ProcessingMeta(BaseModel):
     pipeline_path: list[str] = []  # e.g. ["router", "preprocessing", "general"]
     module_versions: dict[str, str] = {}
     timings_ms: dict[str, float] = {}
-
-
-class ValidationIssue(BaseModel):
-    id: str
-    severity: Literal["error", "warning", "info"]
-    message: str
 
 
 class ExtractionResult(BaseModel):

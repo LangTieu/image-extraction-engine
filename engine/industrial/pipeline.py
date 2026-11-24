@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 import time
+from typing import Any
 
 import numpy as np
 
@@ -60,11 +61,19 @@ class IndustrialVision:
         ocr: GeneralOCR | None = None,
         profiles: list[IndustrialProfile] | None = None,
         detector_hook: DetectorModelHook | None = None,
+        review_thresholds: Any | None = None,
+        review_backend: Any | None = None,
+        quality_hook: Any | None = None,
     ) -> None:
         self.profiles = profiles  # None -> bundled profiles loaded lazily
         self.detector_hook = detector_hook or UnavailableDetectorHook()
         self._preprocessing = preprocessing
         self._ocr = ocr
+        from engine.validation.review import ReviewThresholds
+
+        self.review_thresholds = review_thresholds or ReviewThresholds()
+        self.review_backend = review_backend  # None -> validation only, no queue
+        self.quality_hook = quality_hook  # optional callable image -> [0, 1]
 
     def _profile_pool(self) -> list[IndustrialProfile] | None:
         if self.profiles is not None:
@@ -106,7 +115,7 @@ class IndustrialVision:
             status = ExtractionStatus.COMPLETED_WITH_WARNINGS
         else:
             status = ExtractionStatus.COMPLETED
-        return ExtractionResult(
+        result = ExtractionResult(
             document_type=(
                 profile.categories[0] if profile and profile.categories else "industrial_hmi"
             ),
@@ -133,6 +142,28 @@ class IndustrialVision:
                 }
             },
         )
+
+        # P5: validation, confidence and review queue on the final result.
+        from engine.validation.validate_result import validate_result
+
+        quality = None
+        if self.quality_hook is not None:
+            quality = self.quality_hook(working)
+        result = validate_result(
+            result,
+            profile_name=profile.name if profile else None,
+            thresholds=self.review_thresholds,
+            review_backend=self.review_backend,
+            quality_score=quality,
+        )
+        if result.extraction_status == ExtractionStatus.NEEDS_REVIEW:
+            status = ExtractionStatus.NEEDS_REVIEW
+        elif result.extraction_status == ExtractionStatus.COMPLETED_WITH_WARNINGS or warnings:
+            status = ExtractionStatus.COMPLETED_WITH_WARNINGS
+        else:
+            status = ExtractionStatus.COMPLETED
+        result.extraction_status = status
+        return result
 
     # -- internal steps -----------------------------------------------------
 

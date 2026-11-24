@@ -1,0 +1,52 @@
+# steel_coil_mill profile rules (P5): extend/tighten default.yaml.
+rules:
+  - id: THICKNESS_RANGE
+    type: range
+    severity: error
+    message: "thickness outside plausible range for the mill"
+    params: {field: thickness_mm, min: 0.1, max: 25}
+
+  - id: WIDTH_RANGE
+    type: range
+    severity: error
+    message: "width outside plausible range for the mill"
+    params: {field: width_mm, min: 200, max: 2500}
+
+  - id: WEIGHT_RANGE
+    type: range
+    severity: error
+    message: "weight outside plausible range for the mill"
+    params: {field: weight_t, min: 0.1, max: 50}
+
+  - id: COIL_ID_FORMAT
+    type: format
+    severity: error
+    message: "coil id does not match the mill pattern"
+    params:
+      fields: [coil_id]
+      regex: "[A-Z0-9][A-Z0-9./-]{4,24}"
+
+  - id: COIL_ID_UNIQUE
+    type: uniqueness
+    severity: error
+    message: "duplicate coil id in mill table"
+    params:
+      columns: [coil_id]
+
+  - id: WIDTH_UNIT
+    type: unit_match
+    severity: warning
+    message: "width must be reported in mm"
+    params: {field: width_mm, unit: mm}
+
+  - id: THICKNESS_UNIT
+    type: unit_match
+    severity: warning
+    message: "thickness must be reported in mm"
+    params: {field: thickness_mm, unit: mm}
+
+  - id: WEIGHT_UNIT
+    type: unit_match
+    severity: warning
+    message: "weight must be reported in tonnes"
+    params: {field: weight_t, unit: t}

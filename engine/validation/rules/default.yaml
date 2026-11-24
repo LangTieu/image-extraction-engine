@@ -1,0 +1,156 @@
+# Default validation rules (P5). A rule has an id, a severity, a message and
+# a typed checker; params are passed straight to engine/validation/rules.py.
+# Thresholds live here so they can be tuned without code changes.
+rules:
+  - id: THICKNESS_RANGE
+    type: range
+    severity: error
+    message: "thickness outside plausible physical range"
+    params: {field: THICK, min: 0.05, max: 500}
+
+  - id: WIDTH_RANGE
+    type: range
+    severity: error
+    message: "width outside plausible physical range"
+    params: {field: WIDTH, min: 10, max: 4000}
+
+  - id: WEIGHT_RANGE
+    type: range
+    severity: error
+    message: "weight outside plausible physical range"
+    params: {field: WEIGHT, min: 0.01, max: 100000}
+
+  - id: LENGTH_RANGE
+    type: range
+    severity: warning
+    message: "length outside plausible physical range"
+    params: {field: LENGTH, min: 0.1, max: 5000}
+
+  - id: COIL_ID_FORMAT
+    type: format
+    severity: error
+    message: "coil id does not match the expected pattern"
+    params:
+      fields: [COIL_NO, COIL_ID, ID, COIL, COIL_CODE, HOT_COIL_NO, COLD_COIL_NO]
+      regex: "[A-Z][0-9]{5}"
+
+  - id: COIL_NO_UNIQUE
+    type: uniqueness
+    severity: error
+    message: "duplicate coil id in table"
+    params:
+      columns: [COIL_NO, COIL_ID]
+
+  # Field-level only: the seed table's WEIGHT column is not formula-consistent
+  # (weights include a mill factor), so a row-level check would false-positive.
+  - id: COIL_WEIGHT_CONSISTENCY
+    type: cross_field
+    severity: error
+    message: "weight inconsistent with dimensions (steel density 7.85 kg/dm3)"
+    params:
+      target: WEIGHT
+      formula: "THICK * WIDTH * LENGTH * 0.00785"
+      tolerance: 0.10
+      scope: fields
+
+  # Table-column checks (coil_list layout in the benchmark seed).
+  - id: NUMERIC_THICK_FORMAT
+    type: format
+    severity: error
+    message: "numeric column contains a non-numeric value (probable OCR error)"
+    params:
+      table: coil_list
+      column: THICK
+      regex: "[0-9]+(\\.[0-9]+)?"
+
+  - id: NUMERIC_WIDTH_FORMAT
+    type: format
+    severity: error
+    message: "numeric column contains a non-numeric value (probable OCR error)"
+    params:
+      table: coil_list
+      column: WIDTH
+      regex: "[0-9]+(\\.[0-9]+)?"
+
+  - id: NUMERIC_WEIGHT_FORMAT
+    type: format
+    severity: error
+    message: "numeric column contains a non-numeric value (probable OCR error)"
+    params:
+      table: coil_list
+      column: WEIGHT
+      regex: "[0-9]+(\\.[0-9]+)?"
+
+  - id: NUMERIC_LENGTH_FORMAT
+    type: format
+    severity: error
+    message: "numeric column contains a non-numeric value (probable OCR error)"
+    params:
+      table: coil_list
+      column: LENGTH
+      regex: "[0-9]+(\\.[0-9]+)?"
+
+  - id: COIL_NO_UNIQUE
+    type: uniqueness
+    severity: error
+    message: "duplicate coil id in table"
+    params:
+      columns: [HOT_COIL_NO, COLD_COIL_NO]
+
+  - id: INVOICE_ID_FORMAT
+    type: format
+    severity: error
+    message: "invoice number does not match the expected pattern (year/serial)"
+    params:
+      fields: [invoice_number, INVOICE_NO]
+      regex: "[0-9]{4}/[0-9]{4,8}"
+
+  - id: CUSTOMER_NAME_FORMAT
+    type: format
+    severity: error
+    message: "customer name contains a digit or is too short (probable OCR error)"
+    params:
+      fields: [customer_name, CUSTOMER_NAME]
+      regex: "[^0-9_]{3,64}"
+
+  - id: WEIGHT_UNIT
+    type: unit_match
+    severity: warning
+    message: "unexpected weight unit"
+    params: {field: WEIGHT, unit: kg}
+
+  - id: HOT_COIL_NO_TABLE_FORMAT
+    type: format
+    severity: error
+    message: "coil id in table does not match the expected pattern"
+    params:
+      table: coil_list
+      column: HOT_COIL_NO
+      regex: "[A-Z][0-9]{5}"
+
+  - id: COLD_COIL_NO_TABLE_FORMAT
+    type: format
+    severity: error
+    message: "coil id in table does not match the expected pattern"
+    params:
+      table: coil_list
+      column: COLD_COIL_NO
+      regex: "[A-Z][0-9]{5}"
+
+  - id: ZONE_COLUMN_FORMAT
+    type: format
+    severity: error
+    message: "zone code does not match the expected pattern"
+    params:
+      table: coil_list
+      column: ZONE
+      regex: "[A-Z]{2,3}[0-9]{0,2}"
+
+  - id: PRODUCT_CODE_COLUMN_FORMAT
+    type: format
+    severity: error
+    message: "product code does not match the expected pattern"
+    params:
+      table: coil_list
+      column: PRODUCT_CODE
+      regex: "[A-Z]{4}"
