@@ -1,0 +1,22 @@
+# Photographed paper documents: full geometry + enhancement stack.
+name: photographed_document
+steps:
+  orientation:
+    detect: true
+    deskew: true
+    max_correction_angle: 10.0
+  perspective:
+    enabled: true
+    min_area_fraction: 0.25
+  crop:
+    mode: content
+    border_margin_px: 4
+  denoise:
+    method: fastnlmeans
+    strength: 5
+  contrast:
+    clip_limit: 2.0
+    tile_grid_size: 8
+  sharpen:
+    strength: 0.6
+    radius: 3

@@ -1,0 +1,317 @@
+[
+  {
+    "set": "coil_table",
+    "source": "coil_table_001.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 219.67283700359985,
+    "engine": "tesseract"
+  },
+  {
+    "set": "coil_table",
+    "source": "coil_table_002.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 213.7610429781489,
+    "engine": "tesseract"
+  },
+  {
+    "set": "coil_table",
+    "source": "coil_table_003.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 280.24109100806527,
+    "engine": "tesseract"
+  },
+  {
+    "set": "coil_table",
+    "source": "coil_table_004.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 210.46322098118253,
+    "engine": "tesseract"
+  },
+  {
+    "set": "coil_table",
+    "source": "coil_table_005.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 219.50942699913867,
+    "engine": "tesseract"
+  },
+  {
+    "set": "form",
+    "source": "form_001.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 217.98260600189678,
+    "engine": "tesseract"
+  },
+  {
+    "set": "form",
+    "source": "form_002.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 204.8952659824863,
+    "engine": "tesseract"
+  },
+  {
+    "set": "form",
+    "source": "form_003.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 210.9338709851727,
+    "engine": "tesseract"
+  },
+  {
+    "set": "form",
+    "source": "form_004.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 205.20272699650377,
+    "engine": "tesseract"
+  },
+  {
+    "set": "form",
+    "source": "form_005.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 218.98541701375507,
+    "engine": "tesseract"
+  },
+  {
+    "set": "industrial_hmi",
+    "source": "industrial_hmi_001.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 210.54803099832498,
+    "engine": "tesseract"
+  },
+  {
+    "set": "industrial_hmi",
+    "source": "industrial_hmi_002.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 202.0479049824644,
+    "engine": "tesseract"
+  },
+  {
+    "set": "industrial_hmi",
+    "source": "industrial_hmi_003.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 204.70448702690192,
+    "engine": "tesseract"
+  },
+  {
+    "set": "industrial_hmi",
+    "source": "industrial_hmi_004.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 209.0175400080625,
+    "engine": "tesseract"
+  },
+  {
+    "set": "industrial_hmi",
+    "source": "industrial_hmi_005.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 212.57564198458567,
+    "engine": "tesseract"
+  },
+  {
+    "set": "photo_document",
+    "source": "photo_document_001.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 206.54238801216707,
+    "engine": "tesseract"
+  },
+  {
+    "set": "photo_document",
+    "source": "photo_document_002.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 213.36179299396463,
+    "engine": "tesseract"
+  },
+  {
+    "set": "photo_document",
+    "source": "photo_document_003.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 206.92046798649244,
+    "engine": "tesseract"
+  },
+  {
+    "set": "photo_document",
+    "source": "photo_document_004.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 218.9825760142412,
+    "engine": "tesseract"
+  },
+  {
+    "set": "photo_document",
+    "source": "photo_document_005.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 219.4964170048479,
+    "engine": "tesseract"
+  },
+  {
+    "set": "screenshot_desktop",
+    "source": "screenshot_desktop_001.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 215.74582401080988,
+    "engine": "tesseract"
+  },
+  {
+    "set": "screenshot_desktop",
+    "source": "screenshot_desktop_002.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 213.90042299753986,
+    "engine": "tesseract"
+  },
+  {
+    "set": "screenshot_desktop",
+    "source": "screenshot_desktop_003.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 208.95192900206894,
+    "engine": "tesseract"
+  },
+  {
+    "set": "screenshot_desktop",
+    "source": "screenshot_desktop_004.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 231.91069599124603,
+    "engine": "tesseract"
+  },
+  {
+    "set": "screenshot_desktop",
+    "source": "screenshot_desktop_005.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 215.88768501533195,
+    "engine": "tesseract"
+  },
+  {
+    "set": "screenshot_mobile",
+    "source": "screenshot_mobile_001.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 201.53518399456516,
+    "engine": "tesseract"
+  },
+  {
+    "set": "screenshot_mobile",
+    "source": "screenshot_mobile_002.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 204.48620701790787,
+    "engine": "tesseract"
+  },
+  {
+    "set": "screenshot_mobile",
+    "source": "screenshot_mobile_003.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 199.39887302462012,
+    "engine": "tesseract"
+  },
+  {
+    "set": "screenshot_mobile",
+    "source": "screenshot_mobile_004.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 209.384379995754,
+    "engine": "tesseract"
+  },
+  {
+    "set": "screenshot_mobile",
+    "source": "screenshot_mobile_005.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 203.39257500017993,
+    "engine": "tesseract"
+  },
+  {
+    "set": "table_image",
+    "source": "table_image_001.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 204.33538599172607,
+    "engine": "tesseract"
+  },
+  {
+    "set": "table_image",
+    "source": "table_image_002.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 218.90515700215474,
+    "engine": "tesseract"
+  },
+  {
+    "set": "table_image",
+    "source": "table_image_003.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 212.01745100552216,
+    "engine": "tesseract"
+  },
+  {
+    "set": "table_image",
+    "source": "table_image_004.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 217.5985460053198,
+    "engine": "tesseract"
+  },
+  {
+    "set": "table_image",
+    "source": "table_image_005.png",
+    "cer": 0.0,
+    "wer": 0.0,
+    "chars": 132,
+    "elapsed_ms": 219.10659701097757,
+    "engine": "tesseract"
+  }
+]

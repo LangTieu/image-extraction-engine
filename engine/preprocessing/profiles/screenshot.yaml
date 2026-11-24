@@ -1,0 +1,14 @@
+# Desktop / mobile screenshots: pixel-aligned, never photographed.
+# Skew and perspective detection are off; screenshots are already axis-aligned.
+name: screenshot
+steps:
+  crop:
+    mode: border
+    border_margin_px: 2
+  contrast:
+    clip_limit: 1.5
+    tile_grid_size: 8
+  upscale:
+    enabled: true
+    min_text_height_px: 14
+    max_factor: 3.0

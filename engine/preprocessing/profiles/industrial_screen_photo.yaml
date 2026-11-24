@@ -1,0 +1,20 @@
+# Photographed screens and industrial HMI panels: glare, perspective, noise.
+name: industrial_screen_photo
+steps:
+  orientation:
+    detect: true
+    deskew: true
+    max_correction_angle: 10.0
+  perspective:
+    enabled: true
+    min_area_fraction: 0.25
+  denoise:
+    method: fastnlmeans
+    strength: 7
+  contrast:
+    clip_limit: 2.5
+    tile_grid_size: 8
+    gamma: 1.1
+  sharpen:
+    strength: 0.8
+    radius: 3

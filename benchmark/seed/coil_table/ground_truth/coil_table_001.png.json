@@ -1,0 +1,155 @@
+{
+  "document_type": "coil_table",
+  "extraction_status": "completed",
+  "source": {
+    "file_name": "coil_table_001.png",
+    "page": 1
+  },
+  "pages": [],
+  "text_blocks": [
+    {
+      "text": "Hóa đơn giá trị gia tăng",
+      "bbox": {
+        "x0": 0.0,
+        "y0": 0.0,
+        "x1": 400.0,
+        "y1": 18.0
+      },
+      "confidence": 1.0,
+      "language": "vi"
+    },
+    {
+      "text": "Khách hàng: Công ty TNHH Thép Việt",
+      "bbox": {
+        "x0": 0.0,
+        "y0": 20.0,
+        "x1": 400.0,
+        "y1": 38.0
+      },
+      "confidence": 1.0,
+      "language": "vi"
+    },
+    {
+      "text": "Tổng cộng: 12.500.000 VND",
+      "bbox": {
+        "x0": 0.0,
+        "y0": 40.0,
+        "x1": 400.0,
+        "y1": 58.0
+      },
+      "confidence": 1.0,
+      "language": "vi"
+    },
+    {
+      "text": "Invoice number",
+      "bbox": {
+        "x0": 0.0,
+        "y0": 60.0,
+        "x1": 400.0,
+        "y1": 78.0
+      },
+      "confidence": 1.0,
+      "language": "en"
+    },
+    {
+      "text": "Total amount",
+      "bbox": {
+        "x0": 0.0,
+        "y0": 80.0,
+        "x1": 400.0,
+        "y1": 98.0
+      },
+      "confidence": 1.0,
+      "language": "en"
+    },
+    {
+      "text": "Customer signature",
+      "bbox": {
+        "x0": 0.0,
+        "y0": 100.0,
+        "x1": 400.0,
+        "y1": 118.0
+      },
+      "confidence": 1.0,
+      "language": "en"
+    }
+  ],
+  "tables": [
+    {
+      "table_name": "coil_list",
+      "columns": [
+        "ZONE",
+        "HOT_COIL_NO",
+        "COLD_COIL_NO",
+        "THICK",
+        "WIDTH",
+        "WEIGHT",
+        "LENGTH",
+        "PRODUCT_CODE"
+      ],
+      "rows": [
+        [
+          "ZA",
+          "H00001",
+          "C00001",
+          "1.20",
+          "1250",
+          "15000",
+          "620",
+          "SPHC"
+        ],
+        [
+          "ZA",
+          "H00002",
+          "C00002",
+          "0.80",
+          "1000",
+          "9800",
+          "540",
+          "SPCC"
+        ]
+      ],
+      "cells": [],
+      "confidence": 1.0
+    }
+  ],
+  "fields": [
+    {
+      "name": "HOT_COIL_NO",
+      "value": "H00001",
+      "raw_text": "H00001",
+      "type": "id",
+      "confidence": 1.0,
+      "needs_review": false
+    },
+    {
+      "name": "THICK",
+      "value": 1.2,
+      "raw_text": "1.20",
+      "unit": "mm",
+      "type": "number",
+      "confidence": 1.0,
+      "needs_review": false
+    }
+  ],
+  "validation_results": [],
+  "warnings": [],
+  "exports": [
+    "json",
+    "xlsx"
+  ],
+  "processing": {
+    "pipeline_path": [
+      "router",
+      "preprocessing",
+      "general"
+    ],
+    "module_versions": {
+      "engine": "0.0.1"
+    },
+    "timings_ms": {
+      "total": 0.0
+    }
+  },
+  "extensions": {}
+}

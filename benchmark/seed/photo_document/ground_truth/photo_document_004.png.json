@@ -1,0 +1,99 @@
+{
+  "document_type": "photo_document",
+  "extraction_status": "completed",
+  "source": {
+    "file_name": "photo_document_004.png",
+    "page": 1
+  },
+  "pages": [],
+  "text_blocks": [
+    {
+      "text": "Hóa đơn giá trị gia tăng",
+      "bbox": {
+        "x0": 0.0,
+        "y0": 0.0,
+        "x1": 400.0,
+        "y1": 18.0
+      },
+      "confidence": 1.0,
+      "language": "vi"
+    },
+    {
+      "text": "Khách hàng: Công ty TNHH Thép Việt",
+      "bbox": {
+        "x0": 0.0,
+        "y0": 20.0,
+        "x1": 400.0,
+        "y1": 38.0
+      },
+      "confidence": 1.0,
+      "language": "vi"
+    },
+    {
+      "text": "Tổng cộng: 12.500.000 VND",
+      "bbox": {
+        "x0": 0.0,
+        "y0": 40.0,
+        "x1": 400.0,
+        "y1": 58.0
+      },
+      "confidence": 1.0,
+      "language": "vi"
+    },
+    {
+      "text": "Invoice number",
+      "bbox": {
+        "x0": 0.0,
+        "y0": 60.0,
+        "x1": 400.0,
+        "y1": 78.0
+      },
+      "confidence": 1.0,
+      "language": "en"
+    },
+    {
+      "text": "Total amount",
+      "bbox": {
+        "x0": 0.0,
+        "y0": 80.0,
+        "x1": 400.0,
+        "y1": 98.0
+      },
+      "confidence": 1.0,
+      "language": "en"
+    },
+    {
+      "text": "Customer signature",
+      "bbox": {
+        "x0": 0.0,
+        "y0": 100.0,
+        "x1": 400.0,
+        "y1": 118.0
+      },
+      "confidence": 1.0,
+      "language": "en"
+    }
+  ],
+  "tables": [],
+  "fields": [],
+  "validation_results": [],
+  "warnings": [],
+  "exports": [
+    "json",
+    "xlsx"
+  ],
+  "processing": {
+    "pipeline_path": [
+      "router",
+      "preprocessing",
+      "general"
+    ],
+    "module_versions": {
+      "engine": "0.0.1"
+    },
+    "timings_ms": {
+      "total": 0.0
+    }
+  },
+  "extensions": {}
+}

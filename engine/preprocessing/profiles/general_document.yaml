@@ -1,0 +1,14 @@
+# Clean inputs: rendered documents, screenshots, forms, clean table images.
+# Conservative: only light contrast + sharpening; no aggressive geometry.
+name: general_document
+steps:
+  orientation:
+    detect: true
+    deskew: true
+    max_correction_angle: 10.0
+  contrast:
+    clip_limit: 2.0
+    tile_grid_size: 8
+  sharpen:
+    strength: 0.5
+    radius: 3
