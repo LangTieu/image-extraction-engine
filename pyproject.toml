@@ -51,7 +51,7 @@ warn_unused_ignores = true
 disallow_untyped_defs = false
 
 [[tool.mypy.overrides]]
-module = ["yaml", "pypdfium2", "pytesseract", "paddleocr", "paddlex"]
+module = ["yaml", "pypdfium2", "pytesseract", "paddleocr", "paddlex", "huggingface_hub", "transformers", "torch", "docling", "docling.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

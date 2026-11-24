@@ -61,8 +61,16 @@ class RuledGridBackend(TableBackend):
             vmask, 1, np.pi / 180, threshold=40, minLineLength=h // 8, maxLineGap=6
         )
         # cv2 >= 5.0 returns (N, 4) instead of (N, 1, 4): normalize both.
-        hlines = [] if raw_h is None else np.asarray(raw_h).reshape(-1, 4)
-        vlines = [] if raw_v is None else np.asarray(raw_v).reshape(-1, 4)
+        hlines: np.ndarray = (
+            np.asarray(raw_h).reshape(-1, 4)
+            if raw_h is not None
+            else np.empty((0, 4), dtype=np.int32)
+        )
+        vlines: np.ndarray = (
+            np.asarray(raw_v).reshape(-1, 4)
+            if raw_v is not None
+            else np.empty((0, 4), dtype=np.int32)
+        )
         if len(hlines) == 0 or len(vlines) == 0:
             return []
 
