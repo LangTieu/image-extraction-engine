@@ -58,7 +58,7 @@ def detect_screen_quad(image: np.ndarray) -> np.ndarray | None:
     # is not a screen boundary — fall back to the full frame.
     mask = np.zeros(gray.shape, np.uint8)
     pts = [np.asarray(quad, dtype=np.int32)]
-    cv2.fillPoly(mask, pts, 255)  # type: ignore[call-overload]
+    cv2.fillPoly(mask, pts, (255,))
     inside_mask = mask.astype(bool)
     inside = float(gray[inside_mask].mean()) if inside_mask.any() else 0.0
     outside = float(gray[~inside_mask].mean()) if (~inside_mask).any() else inside

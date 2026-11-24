@@ -14,6 +14,7 @@ to the OCR path so scanned and mixed PDFs behave the same as images.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -91,14 +92,16 @@ class DoclingParser:
     """
 
     def __init__(self) -> None:
-        self._converter: object | None = None  # lazy: Docling model download is heavy
+        # Any: Docling is an optional dependency with no bundled types;
+        # the converter is created lazily and used only via .convert().
+        self._converter: Any = None  # lazy: Docling model download is heavy
 
     def parse(self, pdf_path: str) -> list[str]:
         if self._converter is None:
             from docling.document_converter import DocumentConverter
 
             self._converter = DocumentConverter()
-        result = self._converter.convert(pdf_path)  # type: ignore[attr-defined]
+        result = self._converter.convert(pdf_path)
         return [result.document.export_to_text()]
 
 
