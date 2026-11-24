@@ -6,3 +6,12 @@ __pycache__/
 .mlai/
 *.egg-info/
 .DS_Store
+
+# P7 service runtime data + web build
+service/data/
+service/web/node_modules/
+service/web/dist/
+.env
+
+# P7 service runtime data (stale smoke-test output)
+/data/
