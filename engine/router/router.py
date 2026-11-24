@@ -164,7 +164,14 @@ def extract_keywords(text: str) -> list[str]:
     if not text:
         return []
     lowered = re.sub(r"\s+", " ", text.lower())
-    return [kw for kw in set(HMI_KEYWORDS) | set(DOCUMENT_KEYWORDS) if kw in lowered]
+    found = [
+        kw
+        for kw in set(HMI_KEYWORDS) | set(DOCUMENT_KEYWORDS)
+        # Word-boundary match: "run" must not hit "running", "đơn" must not
+        # hit every word containing those letters.
+        if re.search(rf"(?<!\w){re.escape(kw)}(?!\w)", lowered)
+    ]
+    return found
 
 
 # --- scoring ---------------------------------------------------------------
@@ -208,19 +215,22 @@ def route_image(
         doc_hits = [k for k in keywords if k in DOCUMENT_KEYWORDS]
         if hmi_hits:
             scores["industrial_hmi"] = scores.get("industrial_hmi", 0.0) + 0.4
-            reasons.append(f"HMI keywords: {sorted(set(hmi_hits))}")
+            # Unique hits, capped, so a wall of repeated keywords neither
+            # spams the reasons list nor scales the boost.
+            reasons.append(f"HMI keywords: {sorted(set(hmi_hits))[:4]}")
         if doc_hits:
             scores["photo_document"] = scores.get("photo_document", 0.0) + 0.4
             reasons.append(f"document keywords: {sorted(set(doc_hits))[:4]}")
 
-    known = {k: v for k, v in scores.items() if k != "unknown"}
+    known = {k: v for k, v in scores.items() if k != "unknown" and v > 0.0}
     if not known:
         return RouteDecision(
             category=get_category("unknown"),
             confidence=0.0,
             scores=scores,
-            reasons=["no registered category to score"],
-            route_warning="no categories registered",
+            reasons=["best score 0.0000 below 0.3: no category scored above zero"],
+            keywords=sorted(set(keywords)),
+            route_warning="best score 0.0000 below 0.3",
         )
     best_id = max(known, key=lambda k: known[k])
     best = known[best_id]

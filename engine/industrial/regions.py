@@ -76,7 +76,7 @@ _PALETTE: dict[str, tuple[np.ndarray, np.ndarray]] = {
     "blue": (np.array([95, 110, 70]), np.array([130, 255, 255])),
 }
 
-_ALARM_COLORS = {"red", "yellow"}
+_ALARM_COLORS = {"red", "red2", "yellow"}
 
 
 def _color_masks(hsv: np.ndarray) -> dict[str, np.ndarray]:

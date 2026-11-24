@@ -1,7 +1,7 @@
 {
   "module": "engine.industrial",
   "seed_dir": "benchmark/seed",
-  "runtime_s": 36.87,
+  "runtime_s": 37.94,
   "per_set": {
     "coil_table": {
       "samples": [
@@ -16,8 +16,8 @@
             "screen boundary not detected; using full frame",
             "glare on screen: 2.8% of pixels blown out",
             "possible moiré interference (score 1.00)",
-            "row 0 weight_t: 16000.0 > max 40",
-            "row 1 weight_t: 9800.0 > max 40"
+            "row 0 weight_t: 16000.0 > max 40.0",
+            "row 1 weight_t: 9800.0 > max 40.0"
           ]
         },
         {
@@ -31,8 +31,8 @@
             "screen boundary not detected; using full frame",
             "glare on screen: 2.8% of pixels blown out",
             "possible moiré interference (score 1.00)",
-            "row 0 weight_t: 16000.0 > max 40",
-            "row 1 weight_t: 9800.0 > max 40"
+            "row 0 weight_t: 16000.0 > max 40.0",
+            "row 1 weight_t: 9800.0 > max 40.0"
           ]
         },
         {
@@ -46,8 +46,8 @@
             "screen boundary not detected; using full frame",
             "glare on screen: 2.8% of pixels blown out",
             "possible moiré interference (score 1.00)",
-            "row 0 weight_t: 16000.0 > max 40",
-            "row 1 weight_t: 9800.0 > max 40"
+            "row 0 weight_t: 16000.0 > max 40.0",
+            "row 1 weight_t: 9800.0 > max 40.0"
           ]
         },
         {
@@ -61,8 +61,8 @@
             "screen boundary not detected; using full frame",
             "glare on screen: 2.8% of pixels blown out",
             "possible moiré interference (score 1.00)",
-            "row 0 weight_t: 16000.0 > max 40",
-            "row 1 weight_t: 9800.0 > max 40"
+            "row 0 weight_t: 16000.0 > max 40.0",
+            "row 1 weight_t: 9800.0 > max 40.0"
           ]
         },
         {
@@ -76,8 +76,8 @@
             "screen boundary not detected; using full frame",
             "glare on screen: 2.8% of pixels blown out",
             "possible moiré interference (score 1.00)",
-            "row 0 weight_t: 16000.0 > max 40",
-            "row 1 weight_t: 9800.0 > max 40"
+            "row 0 weight_t: 16000.0 > max 40.0",
+            "row 1 weight_t: 9800.0 > max 40.0"
           ]
         }
       ],

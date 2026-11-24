@@ -61,6 +61,8 @@ def parse_alarm_row(
     flags: list[str] = []
     if ts is None:
         flags.append("timestamp_unreadable")
+    if code is None:
+        flags.append("code_unreadable")
     severity = None
     lowered = line.lower()
     for level, words in SEVERITY_KEYWORDS.items():
@@ -68,7 +70,7 @@ def parse_alarm_row(
             severity = level
             break
     if severity is None and banner_color is not None:
-        severity = {"red": "critical", "yellow": "warning"}.get(banner_color)
+        severity = {"red": "critical", "red2": "critical", "yellow": "warning"}.get(banner_color)
     return AlarmEntry(
         timestamp=ts.group(0) if ts else None,
         code=code.group(1) if code else None,

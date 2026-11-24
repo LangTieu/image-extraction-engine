@@ -121,6 +121,10 @@ def read_compact(
     upscaled = _upscale(crop, upscale)
     binary = _prep(upscaled)
     whitelist = WHITELISTS.get(field_type, "")
+    # Both branches deliberately use PSM 7 (single text line): PSM 8 (single
+    # word) was tried for whitelisted numeric fields and split/merged digit
+    # groups on machine-printed strings, lowering accuracy. Kept as a flat
+    # assignment so the ternary doesn't suggest a real difference.
     config = _PSM_SINGLE_LINE if whitelist else _PSM_SINGLE_LINE
     if whitelist:
         config += f" -c tessedit_char_whitelist={whitelist}"

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from engine.industrial.profiles import IndustrialProfile
 from engine.industrial.values import disambiguate, parse_value_unit
 from engine.schema import BBox, Cell, Table
+from engine.schema.industrial_fields import DEFAULT_FIELDS, validate_value
 
 _COIL_HEADER_PREFIXES = ("coil", "vòng", "so", "lô", "id", "stt")
 
@@ -110,6 +111,10 @@ def validate_cells(rows: list[CoilRow], profile: IndustrialProfile) -> list[str]
             if parsed.value is None:
                 notes.append(f"row {index} {column}: {parsed.notes[0]}")
                 continue
+            # Wire the field-dictionary rule check (format_regex + range)
+            # into the extraction path: a failing format must be flagged.
+            if column in DEFAULT_FIELDS and raw.strip():
+                notes.extend(validate_value(column, raw))
             if field_def.min_value is not None and parsed.value < field_def.min_value:
                 notes.append(f"row {index} {column}: {parsed.value} < min {field_def.min_value}")
             if field_def.max_value is not None and parsed.value > field_def.max_value:

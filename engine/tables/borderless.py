@@ -63,14 +63,6 @@ class BorderlessClusterBackend(TableBackend):
 
         x_lo, x_hi = float(xs0.min()), float(xs1.max())
         y_lo, y_hi = float(ys0.min()), float(ys1.max())
-        region = TableRegion(
-            bbox=(x_lo, y_lo, x_hi, y_hi),
-            score=min(1.0, len(tokens) / 12.0),
-            backend=self.name,
-            ruled=False,
-        )
-        if region.score < cfg.min_region_score:
-            return []
 
         # Column edges: starts of tokens in the first rows, tolerance from
         # the median token width so ragged text still aligns.
@@ -80,6 +72,31 @@ class BorderlessClusterBackend(TableBackend):
         if len(col_groups) < 2:
             return []
         x_bounds = _boundaries(col_groups, edges, x_lo, x_hi)
+
+        # Structural score: the share of columns that hold more than one
+        # token (real columns are re-used by several rows) times token
+        # coverage of the bounding region. A pile of singletons aligned by
+        # chance scores low; a genuine aligned grid scores high.
+        def _cluster_index(x: float) -> int:
+            return int(np.searchsorted([max(g) for g in col_groups[:-1]], x, side="right"))
+
+        tokens_per_col = [0] * len(col_groups)
+        for t in tokens:
+            tokens_per_col[_cluster_index((t.bbox[0] + t.bbox[2]) / 2)] += 1
+        multi = sum(1 for n in tokens_per_col if n > 1)
+        column_support = multi / max(1, sum(1 for n in tokens_per_col if n))
+        covered_area = (x_hi - x_lo) * (y_hi - y_lo)
+        token_area = float(np.sum((xs1 - xs0) * (ys1 - ys0)))
+        coverage = min(1.0, token_area / max(1.0, covered_area))
+        score = 0.7 * column_support + 0.3 * coverage
+        region = TableRegion(
+            bbox=(x_lo, y_lo, x_hi, y_hi),
+            score=round(score, 3),
+            backend=self.name,
+            ruled=False,
+        )
+        if region.score < cfg.min_region_score:
+            return []
 
         # Row boundaries from vertical extents (groups may differ in height).
         y_bounds: list[float] = [y_lo]

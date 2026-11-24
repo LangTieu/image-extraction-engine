@@ -51,6 +51,14 @@ def reocr_low_confidence(
         retry_tokens = [t for t in retry_result.tokens if t.confidence >= threshold]
         if retry_tokens:
             best = max(retry_tokens, key=lambda t: t.confidence)
+            # The retry only substitutes when it is genuinely better AND
+            # spatially consistent with the original token: a small crop of a
+            # padded ROI can return a neighbour's text at a different spot.
+            x0, y0, x1, y1 = token.bbox
+            area = max(1.0, (x1 - x0) * (y1 - y0))
+            if best.confidence <= token.confidence:
+                kept.append(token)
+                continue
             bw = best.bbox[2] - best.bbox[0]
             bh = best.bbox[3] - best.bbox[1]
             # Map the crop-local bbox back to full-image coordinates. Only the
@@ -67,6 +75,12 @@ def reocr_low_confidence(
                 )
             else:
                 nb = token.bbox
+            # The retry crop is padded ~1.5x the token extent, so a mapped
+            # box much larger than the original is a wrong pick (it swallowed
+            # neighbouring text) — keep the original instead.
+            if (nb[2] - nb[0]) * (nb[3] - nb[1]) > 2.25 * area:
+                kept.append(token)
+                continue
             kept.append(
                 OCRToken(
                     text=best.text, bbox=nb, confidence=best.confidence, language=token.language

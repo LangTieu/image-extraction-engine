@@ -73,7 +73,14 @@ class HybridBackend(TableBackend):
             return results[available[0].name]
 
         # Reconcile pairwise by IoU, starting from the highest-scoring grid.
-        all_grids = [g for grids in results.values() for g in grids]
+        # First drop near-identical grids emitted twice by the SAME backend
+        # (e.g. nested region proposals); left in, they merge with each other
+        # and inflate confidence in the cross-backend step below.
+        all_grids = [
+            deduped
+            for grids in results.values()
+            for deduped in self._dedupe(grids)
+        ]
         all_grids.sort(key=lambda g: g.region.score, reverse=True)
         merged: list[CellGrid] = []
         for grid in all_grids:
@@ -87,6 +94,15 @@ class HybridBackend(TableBackend):
             else:
                 self._merge_into(match, grid)
         return merged
+
+    @staticmethod
+    def _dedupe(grids: list[CellGrid]) -> list[CellGrid]:
+        """Drop same-backend grids whose regions overlap > 0.9 IoU."""
+        kept: list[CellGrid] = []
+        for grid in sorted(grids, key=lambda g: g.region.score, reverse=True):
+            if all(region_iou(k.region.bbox, grid.region.bbox) <= 0.9 for k in kept):
+                kept.append(grid)
+        return kept
 
     @staticmethod
     def _merge_into(keeper: CellGrid, other: CellGrid) -> None:

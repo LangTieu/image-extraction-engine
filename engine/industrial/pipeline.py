@@ -9,6 +9,7 @@ flagged with ``needs_review`` / parse notes.
 
 from __future__ import annotations
 
+import re
 import time
 
 import numpy as np
@@ -37,6 +38,7 @@ from engine.schema import (
     SourceInfo,
     Table,
 )
+from engine.schema.industrial_fields import DEFAULT_FIELDS, validate_value
 
 MODULE_VERSION = "p4-industrial-0.1.0"
 
@@ -96,11 +98,14 @@ class IndustrialVision:
         fields = self._extract_fields(working, regions, profile)
         alarm_entries = self._extract_alarms(working, regions)
 
-        status = (
-            ExtractionStatus.COMPLETED_WITH_WARNINGS
-            if warnings
-            else ExtractionStatus.COMPLETED
-        )
+        if any(f.needs_review for f in fields):
+            # A field flagged by parse notes / format_regex failures must
+            # escalate the whole result to NEEDS_REVIEW.
+            status = ExtractionStatus.NEEDS_REVIEW
+        elif warnings:
+            status = ExtractionStatus.COMPLETED_WITH_WARNINGS
+        else:
+            status = ExtractionStatus.COMPLETED
         return ExtractionResult(
             document_type=(
                 profile.categories[0] if profile and profile.categories else "industrial_hmi"
@@ -244,7 +249,11 @@ class IndustrialVision:
                 cell = crop[top + 2 : bottom - 2, left + 2 : right - 2]
                 # Whitelists (digit-only etc.) apply to data cells only —
                 # applying them to the header row strips its letters.
-                ftype = field_types[col_index] if field_types and row_index > 0 else None
+                ftype = (
+                    field_types[col_index]
+                    if field_types and row_index > 0 and col_index < len(field_types)
+                    else None
+                )
                 reading = read_compact(cell, field_type=ftype or "string")
                 cells_text.append(reading.text)
                 if row_index > 0 and reading.alternatives:
@@ -253,7 +262,9 @@ class IndustrialVision:
             alts.append(row_alts)
         if not rows:
             return [], [], []
-        headers = [h for h in rows[0] if h]
+        # Keep positional alignment: an empty header cell stays as a
+        # placeholder so data-column indices still line up with `headers`.
+        headers = rows[0] if rows else []
         return headers, rows[1:], alts[1:]
 
     def _extract_fields(
@@ -271,11 +282,30 @@ class IndustrialVision:
             if not reading.text:
                 continue
             for name, spec in (profile.fields if profile else {}).items():
-                if spec.name.lower() not in reading.text.lower() and not any(
-                    a.lower() in reading.text.lower() for a in spec.aliases
-                ):
+                # Whole-token match: "T" must not match "THICKNESS"; the
+                # matched label is stripped before parsing the value.
+                labels = [spec.name, *spec.aliases]
+                matched = next(
+                    (
+                        lab
+                        for lab in labels
+                        if re.search(rf"\b{re.escape(lab.lower())}\b", reading.text.lower())
+                    ),
+                    None,
+                )
+                if matched is None:
                     continue
-                parsed = parse_value_unit(reading.text, default_unit=spec.unit)
+                value_text = re.sub(
+                    rf"\b{re.escape(matched.lower())}\b", " ", reading.text, flags=re.IGNORECASE
+                )
+                value_text = value_text.strip(" \t:-=\u00a0")
+                parsed = parse_value_unit(value_text or reading.text, default_unit=spec.unit)
+                review_notes = [
+                    n for n in parsed.notes if not n.startswith("unit defaulted")
+                ]
+                format_problems: list[str] = []
+                if name in DEFAULT_FIELDS and parsed.value is not None:
+                    format_problems = validate_value(name, str(parsed.value))
                 fields.append(
                     FieldValue(
                         name=name,
@@ -290,7 +320,7 @@ class IndustrialVision:
                             x1=region.bbox[2],
                             y1=region.bbox[3],
                         ),
-                        needs_review=bool(parsed.notes or reading.flags),
+                        needs_review=bool(review_notes or reading.flags or format_problems),
                     )
                 )
         return fields

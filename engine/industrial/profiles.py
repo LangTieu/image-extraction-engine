@@ -75,17 +75,36 @@ def _norm(text: str) -> str:
     return " ".join(text.strip().lower().split())
 
 
+def _as_str_tuple(value: Any) -> tuple[str, ...]:
+    """Coerce a YAML scalar or list to a tuple of strings.
+
+    YAML happily parses ``aliases: [12345]`` or ``title_cues: [ LÔ 12 ]``
+    into ints/floats; downstream code expects strings.
+    """
+    if value is None:
+        return ()
+    if isinstance(value, (str, int, float, bool)):
+        value = [value]
+    return tuple(str(v).strip() for v in value if str(v).strip())
+
+
 def profile_from_dict(data: dict[str, Any], source: str | None = None) -> IndustrialProfile:
     fields: dict[str, FieldDef] = {}
     for fname, spec in (data.get("fields") or {}).items():
+        def _num(v: Any) -> float | None:
+            try:
+                return float(v) if v is not None else None
+            except (TypeError, ValueError):
+                return None
+
         fields[fname] = FieldDef(
             name=fname,
             type=spec.get("type", "string"),
             unit=spec.get("unit"),
-            aliases=tuple(spec.get("aliases", ())),
+            aliases=_as_str_tuple(spec.get("aliases")),
             format_regex=spec.get("format_regex"),
-            min_value=spec.get("min_value"),
-            max_value=spec.get("max_value"),
+            min_value=_num(spec.get("min_value")),
+            max_value=_num(spec.get("max_value")),
             seven_segment=bool(spec.get("seven_segment", False)),
         )
     schemas: dict[str, TableSchema] = {}
@@ -93,16 +112,16 @@ def profile_from_dict(data: dict[str, Any], source: str | None = None) -> Indust
         schemas[sname] = TableSchema(
             name=sname,
             header_aliases={
-                col: tuple(aliases) for col, aliases in (spec.get("columns") or {}).items()
+                col: _as_str_tuple(aliases) for col, aliases in (spec.get("columns") or {}).items()
             },
-            id_columns=tuple(spec.get("id_columns", ())),
+            id_columns=_as_str_tuple(spec.get("id_columns")),
         )
     return IndustrialProfile(
         name=data.get("name", Path(source or "profile").stem),
-        categories=tuple(data.get("categories", ())),
-        title_cues=tuple(data.get("title_cues", ())),
-        layout_anchors=tuple(data.get("layout_anchors", ())),
-        colors=tuple(data.get("colors", ())),
+        categories=_as_str_tuple(data.get("categories")),
+        title_cues=_as_str_tuple(data.get("title_cues")),
+        layout_anchors=_as_str_tuple(data.get("layout_anchors")),
+        colors=_as_str_tuple(data.get("colors")),
         region_templates={
             k: tuple(v)
             for k, v in (data.get("region_templates") or {}).items()
@@ -141,8 +160,10 @@ def match_profile(
     if category is not None:
         pool = [p for p in pool if not p.categories or category in p.categories]
     best, best_score = None, 0.0
-    for profile in pool:
+    for profile in sorted(pool, key=lambda p: p.name):
         score = profile.match_score(ocr_text)
+        # Strict >, with the pool name-sorted first: equal scores resolve
+        # deterministically instead of by list order.
         if score > best_score:
             best, best_score = profile, score
     return best if best is not None and best_score > 0.0 else None

@@ -29,7 +29,13 @@ def detect_screen_quad(image: np.ndarray) -> np.ndarray | None:
     import cv2
 
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    # Inversion-aware: on dark-background HMI screens the naive OTSU "bright"
+    # mask locks onto the text, not the screen. Inverting the grayscale for
+    # the brightness mask makes the dark screen interior the dominant blob
+    # against a lighter bezel/room instead.
+    frame_mean = float(gray.mean())
+    work = 255 - gray if frame_mean < 127.0 else gray
+    blur = cv2.GaussianBlur(work, (5, 5), 0)
     _, bright = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     edges = cv2.Canny(blur, 50, 150).astype(np.uint8)
     edges = cv2.dilate(edges, np.ones((3, 3), np.uint8)) | bright.astype(np.uint8)
@@ -46,15 +52,17 @@ def detect_screen_quad(image: np.ndarray) -> np.ndarray | None:
     if best is None:
         return None
     quad = tx.order_corners(best.reshape(-1, 2).astype(float))
-    # On dark-background HMI screens the OTSU "bright" mask is the text, not
-    # the screen; its dominant quad is a thin strip of text rows. A real lit
-    # screen is bright inside its boundary — reject quads whose interior is
-    # mostly dark and fall back to the full frame.
+    # Sanity check: the screen interior must differ in brightness from its
+    # surroundings (a lit screen is brighter, a dark HMI screen darker than
+    # the bezel/room around it). A quad hugging a flat area with no contrast
+    # is not a screen boundary — fall back to the full frame.
     mask = np.zeros(gray.shape, np.uint8)
     pts = [np.asarray(quad, dtype=np.int32)]
     cv2.fillPoly(mask, pts, 255)  # type: ignore[call-overload]
-    inside = float(gray[mask.astype(bool)].mean()) if mask.any() else 0.0
-    if inside < 127.0:
+    inside_mask = mask.astype(bool)
+    inside = float(gray[inside_mask].mean()) if inside_mask.any() else 0.0
+    outside = float(gray[~inside_mask].mean()) if (~inside_mask).any() else inside
+    if abs(inside - outside) < 15.0:
         return None
     return quad
 
