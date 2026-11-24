@@ -1,12 +1,19 @@
 """JSON exporter: full unified-schema payload, validated against
-``docs/spec/schema_v0.json`` (falling back to the generated schema) before
-writing. ``options.values_only`` strips provenance (bbox, cells, validation)
-and keeps values. Deterministic: no timestamps, sorted dict keys off.
+``docs/spec/schema_v0.json`` before writing. ``options.values_only`` strips
+provenance (bbox, cells, extensions, validation) and keeps values.
+Deterministic: no timestamps, sorted dict keys off.
+
+Schema resolution (P6 fix): ``SCHEMA_PATH`` is anchored to the repository
+root via ``__file__``, so the exporter works from any working directory. A
+schema file that exists but cannot be parsed raises ``ExportError`` — no
+silent fallback. Only a *missing* file falls back to the generated schema,
+with a ``RuntimeWarning`` on stderr.
 """
 
 from __future__ import annotations
 
 import json
+import warnings
 from functools import lru_cache
 from pathlib import Path
 
@@ -15,16 +22,23 @@ from jsonschema import Draft202012Validator
 from engine.export.base import ExportArtifact, ExportError, ExportOptions, artifact
 from engine.schema.models import ExtractionResult, export_json_schema
 
-SCHEMA_PATH = Path("docs/spec/schema_v0.json")
+SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "docs" / "spec" / "schema_v0.json"
 
 
 @lru_cache(maxsize=1)
 def _schema() -> dict:
     if SCHEMA_PATH.is_file():
-        import contextlib
-
-        with contextlib.suppress(Exception):
+        try:
             return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise ExportError(
+                "json", f"schema file {SCHEMA_PATH} exists but is unreadable: {exc}"
+            ) from exc
+    warnings.warn(
+        f"schema file {SCHEMA_PATH} not found; falling back to the generated schema",
+        RuntimeWarning,
+        stacklevel=2,
+    )
     return export_json_schema()
 
 
@@ -34,8 +48,6 @@ def _strip_provenance(payload: dict) -> dict:
         t.pop("cells", None)
         t.pop("bbox", None)
         t.pop("validation_results", None)
-        for r in t.get("rows", []):
-            pass
     for f in payload.get("fields", []):
         f.pop("bbox", None)
         f.pop("cell_ref", None)
@@ -46,6 +58,9 @@ def _strip_provenance(payload: dict) -> dict:
     payload.pop("validation_results", None)
     payload.pop("processing", None)
     payload.pop("pages", None)
+    # extensions carry domain-specific provenance (validation,
+    # review_item_ids, ...): values-only output must not contain them.
+    payload.pop("extensions", None)
     return payload
 
 

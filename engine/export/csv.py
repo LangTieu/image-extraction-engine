@@ -1,6 +1,16 @@
 """CSV exporter: one UTF-8 CSV per table, optional BOM, delimiter and decimal
 separator configurable, optional ``*_meta.csv`` sidecar with confidence and
 traceability per cell. Deterministic: same input → same bytes.
+
+Data precedence (P6 fix): cells are the *live readings*, rows may be stale, so
+when a table has cells they win: the grid starts from ``rows`` (when present)
+and every cell overwrites its ``(row_index, col_index)`` position; with no
+``rows`` the grid is built from cells alone. ``row_index=0`` is the first row
+of ``rows`` — the first data row, because headers live in ``columns``.
+
+Secondary files (``.tableN.csv`` and ``_meta.csv`` sidecars) are returned on
+the artifact's ``extra_artifacts`` so the batch manifest tracks every file
+written, not just the primary one.
 """
 
 from __future__ import annotations
@@ -13,16 +23,18 @@ from engine.schema.models import ExtractionResult, Table
 
 
 def _table_rows(table: Table) -> list[list[str | None]]:
-    if table.rows:
-        return [list(r) for r in table.rows]
+    grid = [list(r) for r in table.rows]
     if table.cells:
-        grid: dict[tuple[int, int], str] = {}
         for c in table.cells:
-            grid[(c.row_index, c.col_index)] = c.text or ""
-        n_cols = max((c for _, c in grid), default=-1) + 1
-        n_rows = max((r for r, _ in grid), default=-1) + 1
-        return [[grid.get((r, c), "") for c in range(n_cols)] for r in range(n_rows)]
-    return []
+            r_i, c_i = c.row_index, c.col_index
+            while len(grid) <= r_i:
+                grid.append([])
+            grid[r_i].extend([""] * (c_i + 1 - len(grid[r_i])))
+            grid[r_i][c_i] = c.text or ""
+        width = max(len(r) for r in grid)
+        for r in grid:
+            r.extend([""] * (width - len(r)))
+    return grid
 
 
 def _meta_rows(table: Table, table_name: str, page) -> list[list]:
@@ -60,6 +72,7 @@ class CsvExporter:
         out.parent.mkdir(parents=True, exist_ok=True)
         encoding = "utf-8-sig" if options.csv_bom else "utf-8"
         page = result.source.page if result.source else None
+        extras: list[ExportArtifact] = []
         for i, table in enumerate(result.tables, start=1):
             path = out if i == 1 else out.with_name(f"{out.stem}.table{i}{out.suffix}")
             with path.open("w", newline="", encoding=encoding) as fh:
@@ -67,13 +80,18 @@ class CsvExporter:
                 if table.columns:
                     w.writerow(table.columns)
                 w.writerows(_table_rows(table))
+            if path != out:
+                extras.append(artifact(path, "text/csv"))
             if options.csv_meta_sidecar:
                 meta_path = path.with_name(f"{path.stem}_meta.csv")
                 with meta_path.open("w", newline="", encoding=encoding) as fh:
                     csv.writer(fh, delimiter=options.csv_delimiter).writerows(
                         _meta_rows(table, table.table_name or f"table{i}", page)
                     )
-        return artifact(out, "text/csv")
+                extras.append(artifact(meta_path, "text/csv"))
+        art = artifact(out, "text/csv")
+        art.extra_artifacts = extras
+        return art
 
 
 def make():

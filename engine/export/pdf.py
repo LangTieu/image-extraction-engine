@@ -10,34 +10,81 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from PIL import Image as PILImage
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import mm
-from reportlab.platypus import (
-    Image,
-    PageBreak,
-    Paragraph,
-    SimpleDocTemplate,
-    Spacer,
-    Table,
-    TableStyle,
-)
 
 from engine.export.base import ExportArtifact, ExportError, ExportOptions, artifact
+from engine.export.csv import _table_rows
 from engine.schema.models import ExtractionResult
 
-_STYLES = getSampleStyleSheet()
-_BODY = ParagraphStyle(
-    "body", parent=_STYLES["BodyText"], fontName="Helvetica", fontSize=9, leading=12
-)
-_HEAD = ParagraphStyle(
-    "head", parent=_STYLES["Heading2"],
-    fontName="Helvetica-Bold", fontSize=13, spaceAfter=4,
-)
-_REVIEW = ParagraphStyle("nr", parent=_BODY, textColor=colors.red)
+if TYPE_CHECKING:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (
+        Image,
+        PageBreak,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
+
+# reportlab is imported lazily (first export call): a missing install must not
+# break ``import engine.export`` (and with it the CSV/JSON/XLSX exporters);
+# it surfaces as a typed ExportError from the PDF exporter only.
+_STYLES: ParagraphStyle | None = None
+_BODY: ParagraphStyle | None = None
+_HEAD: ParagraphStyle | None = None
+_REVIEW: ParagraphStyle | None = None
+
+
+def _reportlab() -> None:
+    global _STYLES, _BODY, _HEAD, _REVIEW
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.lib.units import mm
+        from reportlab.platypus import (
+            Image,
+            PageBreak,
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
+    except ImportError as exc:
+        raise ExportError(
+            "pdf", "reportlab is not installed; cannot write a PDF report"
+        ) from exc
+    names: dict[str, Any] = {
+        "colors": colors,
+        "A4": A4,
+        "mm": mm,
+        "Image": Image,
+        "PageBreak": PageBreak,
+        "Paragraph": Paragraph,
+        "SimpleDocTemplate": SimpleDocTemplate,
+        "Spacer": Spacer,
+        "Table": Table,
+        "TableStyle": TableStyle,
+    }
+    globals().update(names)
+    styles = getSampleStyleSheet()
+    _STYLES = styles
+    _BODY = ParagraphStyle(
+        "body", parent=styles["BodyText"], fontName="Helvetica", fontSize=9, leading=12
+    )
+    _HEAD = ParagraphStyle(
+        "head", parent=styles["Heading2"],
+        fontName="Helvetica-Bold", fontSize=13, spaceAfter=4,
+    )
+    _REVIEW = ParagraphStyle("nr", parent=_BODY, textColor=colors.red)
 
 
 class PdfExporter:
@@ -50,6 +97,7 @@ class PdfExporter:
         out = Path(out_path)
         if out.suffix.lower() != ".pdf":
             raise ExportError(self.name, f"expected a .pdf path, got {out.name!r}")
+        _reportlab()
         buf = io.BytesIO()
         title = f"Extraction report — {result.source.file_name if result.source else out.name}"
         doc = SimpleDocTemplate(
@@ -89,14 +137,10 @@ class PdfExporter:
             data: list[list] = []
             if table.columns:
                 data.append(list(table.columns))
-            data.extend([list(r) for r in table.rows])
-            if table.cells and not table.rows:
-                grid: dict[tuple[int, int], str] = {}
-                for c in table.cells:
-                    grid[(c.row_index, c.col_index)] = c.text or ""
-                n_cols = max((c for _, c in grid), default=-1) + 1
-                for r in range(max((r for r, _ in grid), default=-1) + 1):
-                    data.append([grid.get((r, c), "") for c in range(n_cols)])
+            # Cells are the live readings: they overlay (and win over) rows,
+            # same precedence as the CSV/XLSX exporters (P6 fix).
+            grid_rows = _table_rows(table)
+            data.extend([list(r) for r in grid_rows])
             if data:
                 t = Table(data, colWidths=[(A4[0] - 40 * mm) / max(len(data[0]), 1)] * len(data[0]))
                 t.setStyle(TableStyle([

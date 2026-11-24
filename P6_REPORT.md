@@ -12,7 +12,7 @@ New package `engine/export/`:
 | `json_export.py` | Full unified payload validated against `docs/spec/schema_v0.json` (generated schema as fallback) before writing; `values_only` strips provenance; deterministic |
 | `image.py` | Annotated JPEG/PNG preview of the source page: table/field/text bboxes, confidence colour bands with legend, optional per-field crop thumbnails; source never modified; typed error when the source image is missing |
 | `pdf.py` | ReportLab A4 report: cover (source, status, counts), embedded annotated preview, tables, fields with needs-review flags, warnings + validation issues; byte-deterministic (`invariant=1`) |
-| `batch.py` | `export_batch()` over many results × formats (per-result `exports` list, always + `json`), one failure never loses the rest (recorded in `errors`), checksum `manifest.json`, optional `bundle.zip` |
+| `batch.py` | `export_batch()` over many results × formats (per-result `exports` list, always + `json`), one failure never loses the rest (recorded in `errors`), checksum `manifest.json`, optional `bundle.zip` — **P6 fix round: bug fixes applied, see `P6_FIX_REPORT.md`** |
 
 ## Changes outside the package
 
@@ -28,7 +28,7 @@ New package `engine/export/`:
 - `mypy engine benchmark tests` → Success: no issues found in 79 source files
 - `benchmark/validate.py` → `35 passed, 0 failed`
 - Round-trip: all 35 seed ground truths through exporters → 145 artifacts, 0 unexpected errors (CSV correctly refuses table-less results; recorded in manifest `errors`).
-- Determinism: CSV/JSON/XLSX/JPG byte-identical across runs; PDF made deterministic via `invariant=1`; manifest checksums (sha256) match file contents.
+- Determinism: CSV/JSON/XLSX/JPG byte-identical across runs; PDF made deterministic via `invariant=1`; manifest checksums (sha256) match file contents. *(P6 review found the XLSX claim false — openpyxl stamps save-time timestamps; fixed and re-verified in the P6 fix round, see `P6_FIX_REPORT.md`.)*
 - Samples committed under `docs/samples/exports/` (coil_table_001 + form_001 × 5 formats, manifest, bundle.zip); both exported JSONs re-validate against `docs/spec/schema_v0.json`.
 
 ## Notes / decisions

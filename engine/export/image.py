@@ -60,8 +60,13 @@ class ImageExporter:
             if t.bbox:
                 box(t.bbox, _COLORS["table"], f"table {t.table_name or ''}".strip())
             for c in t.cells:
-                if c.bbox and c.confidence is not None:
+                if not c.bbox:
+                    continue
+                if c.confidence is not None:
                     box(c.bbox, _BAND_COLORS[conf_band(c.confidence)], None)
+                elif c.needs_review:
+                    # no confidence but flagged: still draw it, in red
+                    box(c.bbox, _BAND_COLORS["red"], None)
         for f in result.fields:
             if f.bbox:
                 if f.confidence is not None:

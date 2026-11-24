@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -27,11 +27,18 @@ class ExportError(RuntimeError):
 
 @dataclass
 class ExportArtifact:
-    """One written file plus the metadata the manifest needs."""
+    """One written file plus the metadata the manifest needs.
+
+    ``extra_artifacts`` lists every *secondary* file the exporter wrote next
+    to the primary artifact (CSV ``tableN.csv``/``_meta.csv`` sidecars, image
+    field-crop files, ...). The batch manifest records one entry per artifact,
+    primary and secondary alike, so no written file is untracked.
+    """
 
     path: Path
     mime: str
     checksum: str  # sha256 hex of the file bytes
+    extra_artifacts: list[ExportArtifact] = field(default_factory=list)
 
 
 @dataclass
@@ -84,7 +91,15 @@ EXPORTERS: dict[str, Exporter] = {}
 
 
 def register(name: str, factory: Callable[[], Exporter]) -> None:
-    """Instantiate and register an exporter under ``name`` (replaces silently)."""
+    """Instantiate and register an exporter under ``name``.
+
+    Raises ``ValueError`` when ``name`` is already registered: a duplicate
+    registration is almost certainly a bug (a module imported twice under
+    different names, or a typo shadowing a built-in), so it must not be
+    silently replaced.
+    """
+    if name in EXPORTERS:
+        raise ValueError(f"exporter {name!r} is already registered")
     EXPORTERS[name] = factory()
 
 
