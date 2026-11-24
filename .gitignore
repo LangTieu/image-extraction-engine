@@ -15,3 +15,6 @@ service/web/dist/
 
 # P7 service runtime data (stale smoke-test output)
 /data/
+
+# TypeScript incremental build cache (leaked into the P7 commit)
+service/web/tsconfig.tsbuildinfo

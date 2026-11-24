@@ -250,7 +250,9 @@ def pending_review(job_id: str):
                 items.append(
                     {
                         "file_id": f.id,
-                        "field_id": field.get("field_id") or field.get("field_name"),
+                        "field_id": field.get("field_id")
+                        or field.get("field_name")
+                        or field.get("name"),
                         "field_name": field.get("field_name"),
                         "value": field.get("value"),
                         "confidence": field.get("confidence"),
@@ -275,7 +277,7 @@ def review_field(job_id: str, field_id: str, body: dict):
     jf: JobFileModel | None = None
     for f in session.query(JobFileModel).filter(JobFileModel.job_id == job_id).all():
         for field in (f.result_json or {}).get("fields", []):
-            fid = field.get("field_id") or field.get("field_name")
+            fid = field.get("field_id") or field.get("field_name") or field.get("name")
             if fid == field_id:
                 target, jf = field, f
                 break
@@ -295,14 +297,12 @@ def review_field(job_id: str, field_id: str, body: dict):
         target["value"] = value
         target["needs_review"] = False
         # Re-validate the corrected value against the industrial dictionary.
-        try:
+        problems: list[str] = []
+        if value is not None:
             from engine.schema.industrial_fields import validate_value
 
-            if target.get("field_name") and value is not None:
-                validate_value(target["field_name"], value)
-            target["validation"] = "ok"
-        except Exception as exc:
-            target["validation"] = f"failed: {exc}"
+            problems = validate_value(field_id, value)
+        target["validation"] = "ok" if not problems else f"failed: {problems}"
     audit = jf.result_json.setdefault("audit_log", [])
     audit.append({"field_id": field_id, "action": action, "value": value, "at": time.time()})
     fields = jf.result_json.get("fields", [])

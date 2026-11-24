@@ -60,14 +60,15 @@ class RuledGridBackend(TableBackend):
         raw_v = cv2.HoughLinesP(
             vmask, 1, np.pi / 180, threshold=40, minLineLength=h // 8, maxLineGap=6
         )
-        hlines = [] if raw_h is None else np.asarray(raw_h)
-        vlines = [] if raw_v is None else np.asarray(raw_v)
+        # cv2 >= 5.0 returns (N, 4) instead of (N, 1, 4): normalize both.
+        hlines = [] if raw_h is None else np.asarray(raw_h).reshape(-1, 4)
+        vlines = [] if raw_v is None else np.asarray(raw_v).reshape(-1, 4)
         if len(hlines) == 0 or len(vlines) == 0:
             return []
 
         tol = max(3.0, w / 200)
-        rows = _cluster_positions(np.array([min(ln[0][1], ln[0][3]) for ln in hlines]), tol)
-        cols = _cluster_positions(np.array([min(ln[0][0], ln[0][2]) for ln in vlines]), tol)
+        rows = _cluster_positions(np.array([min(ln[1], ln[3]) for ln in hlines]), tol)
+        cols = _cluster_positions(np.array([min(ln[0], ln[2]) for ln in vlines]), tol)
         if len(rows) < 2 or len(cols) < 2:
             return []
 

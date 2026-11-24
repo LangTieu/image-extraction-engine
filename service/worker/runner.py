@@ -130,7 +130,12 @@ def build_exports(job_id: str, formats: list[str]) -> list[str]:
             continue
         from engine.schema.models import ExtractionResult
 
-        result = ExtractionResult.model_validate(jf.result_json)
+        # result_json from the pipeline / review PATCH is a partial dict:
+        # backfill required top-level keys the exporters need before validating.
+        raw = jf.result_json
+        raw.setdefault("document_type", "unknown")
+        raw.setdefault("extraction_status", "completed")
+        result = ExtractionResult.model_validate(raw)
         out_dir = settings.artifacts_dir / jf.id
         out_dir.mkdir(parents=True, exist_ok=True)
         options = ExportOptions(values_only=bool(job_options.get("values_only", False)))

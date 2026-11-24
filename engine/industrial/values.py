@@ -114,6 +114,8 @@ def parse_value_unit(raw: str, *, default_unit: str | None = None) -> ParsedValu
         value = float(canonical)
     except ValueError:
         return ParsedValue(raw=raw, value=None, unit=None, notes=[f"unparseable: {text!r}"])
+    if m.group("sign") == "-":
+        value = -value
     unit = m.group("unit")
     if unit:
         # Compound units: "kg/m2", "m/min", "kg/m^2" -> "kg/m2".
