@@ -38,6 +38,15 @@ HMI_KEYWORDS = (
     "manual",
     "recipe",
     "batch",
+    # P4 (industrial module, additive): coil-table and label vocabulary
+    "coil",
+    "vòng",
+    "lô",
+    "trọng lượng",
+    "bề rộng",
+    "bề dày",
+    "nameplate",
+    "serial no",
 )
 DOCUMENT_KEYWORDS = (
     "invoice",

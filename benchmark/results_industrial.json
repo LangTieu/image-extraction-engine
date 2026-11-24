@@ -1,0 +1,162 @@
+{
+  "module": "engine.industrial",
+  "seed_dir": "benchmark/seed",
+  "runtime_s": 19.82,
+  "per_set": {
+    "coil_table": {
+      "samples": [
+        {
+          "sample": "coil_table_001.png",
+          "route_ok": false,
+          "pred_type": "industrial_hmi",
+          "gt_type": "coil_table",
+          "fields_gt": 8,
+          "fields_pred": 0,
+          "warnings": [
+            "glare on screen: 7.2% of pixels blown out",
+            "possible moiré interference (score 1.00)",
+            "NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing"
+          ]
+        },
+        {
+          "sample": "coil_table_002.png",
+          "route_ok": false,
+          "pred_type": "industrial_hmi",
+          "gt_type": "coil_table",
+          "fields_gt": 8,
+          "fields_pred": 0,
+          "warnings": [
+            "glare on screen: 7.2% of pixels blown out",
+            "possible moiré interference (score 1.00)",
+            "NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing"
+          ]
+        },
+        {
+          "sample": "coil_table_003.png",
+          "route_ok": false,
+          "pred_type": "industrial_hmi",
+          "gt_type": "coil_table",
+          "fields_gt": 8,
+          "fields_pred": 0,
+          "warnings": [
+            "glare on screen: 7.2% of pixels blown out",
+            "possible moiré interference (score 1.00)",
+            "NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing"
+          ]
+        },
+        {
+          "sample": "coil_table_004.png",
+          "route_ok": false,
+          "pred_type": "industrial_hmi",
+          "gt_type": "coil_table",
+          "fields_gt": 8,
+          "fields_pred": 0,
+          "warnings": [
+            "glare on screen: 7.2% of pixels blown out",
+            "possible moiré interference (score 1.00)",
+            "NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing"
+          ]
+        },
+        {
+          "sample": "coil_table_005.png",
+          "route_ok": false,
+          "pred_type": "industrial_hmi",
+          "gt_type": "coil_table",
+          "fields_gt": 8,
+          "fields_pred": 0,
+          "warnings": [
+            "glare on screen: 7.2% of pixels blown out",
+            "possible moiré interference (score 1.00)",
+            "NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing"
+          ]
+        }
+      ],
+      "routing_accuracy": 0.0
+    },
+    "industrial_hmi": {
+      "samples": [
+        {
+          "sample": "industrial_hmi_001.png",
+          "route_ok": true,
+          "pred_type": "industrial_hmi",
+          "gt_type": "industrial_hmi",
+          "fields_gt": 0,
+          "fields_pred": 0,
+          "warnings": [
+            "screen boundary not detected; using full frame",
+            "possible moiré interference (score 0.84)",
+            "NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing"
+          ]
+        },
+        {
+          "sample": "industrial_hmi_002.png",
+          "route_ok": true,
+          "pred_type": "industrial_hmi",
+          "gt_type": "industrial_hmi",
+          "fields_gt": 0,
+          "fields_pred": 0,
+          "warnings": [
+            "screen boundary not detected; using full frame",
+            "possible moiré interference (score 0.84)",
+            "NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing"
+          ]
+        },
+        {
+          "sample": "industrial_hmi_003.png",
+          "route_ok": true,
+          "pred_type": "industrial_hmi",
+          "gt_type": "industrial_hmi",
+          "fields_gt": 0,
+          "fields_pred": 0,
+          "warnings": [
+            "screen boundary not detected; using full frame",
+            "possible moiré interference (score 0.84)",
+            "NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing"
+          ]
+        },
+        {
+          "sample": "industrial_hmi_004.png",
+          "route_ok": true,
+          "pred_type": "industrial_hmi",
+          "gt_type": "industrial_hmi",
+          "fields_gt": 0,
+          "fields_pred": 0,
+          "warnings": [
+            "screen boundary not detected; using full frame",
+            "possible moiré interference (score 0.84)",
+            "NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing"
+          ]
+        },
+        {
+          "sample": "industrial_hmi_005.png",
+          "route_ok": true,
+          "pred_type": "industrial_hmi",
+          "gt_type": "industrial_hmi",
+          "fields_gt": 0,
+          "fields_pred": 0,
+          "warnings": [
+            "screen boundary not detected; using full frame",
+            "possible moiré interference (score 0.84)",
+            "NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing"
+          ]
+        }
+      ],
+      "routing_accuracy": 1.0
+    }
+  },
+  "routing_accuracy": 0.5,
+  "field_precision": 0.0,
+  "field_recall": 0.0,
+  "field_f1": 0.0,
+  "unit_accuracy": 0.0,
+  "unknown_rate_flagged": 1.0,
+  "counts": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 40,
+    "unit_ok": 0,
+    "unit_total": 40,
+    "flagged": 0,
+    "unknown": 0
+  }
+}

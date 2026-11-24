@@ -7,11 +7,19 @@ object so the core structure never changes.
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-ExtractionStatus = Literal["completed", "completed_with_warnings", "needs_review", "failed"]
+
+class ExtractionStatus(str, Enum):
+    """Lifecycle status of one extraction result (serializes to its value)."""
+
+    COMPLETED = "completed"
+    COMPLETED_WITH_WARNINGS = "completed_with_warnings"
+    NEEDS_REVIEW = "needs_review"
+    FAILED = "failed"
 
 
 class BBox(BaseModel):

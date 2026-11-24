@@ -1,0 +1,55 @@
+# Sample industrial profile: steel coil mill line display (Vietnamese + English).
+# Demonstrates the YAML profile contract: matching cues, region templates,
+# field dictionary and table column aliases. Factory deployments copy and
+# adapt this file; no code change is needed.
+name: steel_coil_mill
+categories:
+  - coil_table
+  - industrial_hmi
+title_cues:
+  - COIL
+  - VÒNG
+  - LÕ
+  - TRỌNG LƯỢNG
+layout_anchors:
+  - header_bar
+  - status_strip
+colors:
+  - "#003366"
+  - "#ffcc00"
+region_templates:
+  header_bar: [0.0, 0.0, 1.0, 0.12]
+  table_area: [0.02, 0.12, 0.98, 0.9]
+  status_strip: [0.0, 0.9, 1.0, 1.0]
+fields:
+  coil_id:
+    type: id
+    aliases: ["coil", "mã cuộn", "so lô", "số lô", "id"]
+    format_regex: "[A-Z]{2,4}[-][0-9]{3,6}"
+    seven_segment: false
+  width_mm:
+    type: number
+    unit: mm
+    aliases: ["width", "bề rộng", "chiều rộng", "w"]
+    min_value: 200
+    max_value: 2500
+  thickness_mm:
+    type: number
+    unit: mm
+    aliases: ["thickness", "bề dày", "độ dày", "t"]
+    min_value: 0.1
+    max_value: 25
+  weight_t:
+    type: number
+    unit: t
+    aliases: ["weight", "trọng lượng", "khối lượng", "wgt"]
+    min_value: 0.5
+    max_value: 40
+table_schemas:
+  coil_list:
+    id_columns: ["coil_id"]
+    columns:
+      coil_id: ["coil", "mã cuộn", "so lo", "số lô", "id", "stt"]
+      width_mm: ["width", "bề rộng", "chiều rộng"]
+      thickness_mm: ["thickness", "bề dày", "độ dày"]
+      weight_t: ["weight", "trọng lượng", "khối lượng"]

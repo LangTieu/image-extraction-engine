@@ -36,7 +36,7 @@ class TableResult:
     tables: list[Table] = field(default_factory=list)
     backends_used: list[str] = field(default_factory=list)
     elapsed_ms: float = 0.0
-    status: ExtractionStatus = "completed"
+    status: ExtractionStatus = ExtractionStatus.COMPLETED
     warnings: list[str] = field(default_factory=list)
 
 
@@ -116,7 +116,11 @@ class TablePipeline:
             if not table.columns:
                 warnings.append(f"table {table_name or ''}: no header row found")
             tables.append(table)
-        status: ExtractionStatus = "completed_with_warnings" if warnings else "completed"
+        status = (
+            ExtractionStatus.COMPLETED_WITH_WARNINGS
+            if warnings
+            else ExtractionStatus.COMPLETED
+        )
         return TableResult(
             tables=tables,
             backends_used=used,
