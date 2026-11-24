@@ -26,10 +26,12 @@ from engine.schema import (
     TextBlock,
 )
 
-# 1x1 white PNG (valid image bytes for a placeholder).
+# 1x1 white PNG (valid image bytes for a placeholder). The earlier hand-typed
+# hex was a truncated copy that PIL rejects ("broken PNG file"); this one is
+# produced by Pillow and verified loadable.
 PNG_1X1 = bytes.fromhex(
-    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
-    "0000000d4944415478da63f8ffff3f0005fe02fea13558690000000049454e44ae426082"
+    "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de"
+    "0000000c49444154789c63f8ffff3f0005fe02fe0def46b80000000049454e44ae426082"
 )
 
 # P0-required content classes, at 5 samples each.

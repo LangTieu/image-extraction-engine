@@ -149,12 +149,8 @@ def test_region_iou():
 
 class _FakeBackend(TableBackend):
     def __init__(self, name: str, grids: list[CellGrid] | Exception):
-        self._name = name
+        self.name = name  # instance attribute: TableBackend.name is a plain attr
         self._grids = grids
-
-    @property
-    def name(self) -> str:  # noqa: D102 - TableBackend defines it as a class attr
-        return self._name
 
     def detect(self, image, tokens: list) -> list[CellGrid]:
         if isinstance(self._grids, Exception):

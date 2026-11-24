@@ -1,0 +1,74 @@
+{
+  "files": [
+    {
+      "result": "coil_table_001",
+      "format": "xlsx",
+      "path": "coil_table_001.xlsx",
+      "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "sha256": "b03224a68ba72d35d24031d543e9328e620db0b3ba305ceff3b61d635938cc44"
+    },
+    {
+      "result": "coil_table_001",
+      "format": "csv",
+      "path": "coil_table_001.csv",
+      "mime": "text/csv",
+      "sha256": "e4a42c511d48b7811c926d55e4c4dd1263d22e8ef2224610383680b20c219313"
+    },
+    {
+      "result": "coil_table_001",
+      "format": "json",
+      "path": "coil_table_001.json",
+      "mime": "application/json",
+      "sha256": "008a404e16796056d7213557f81b0a80126201272c03c674f568bec71e1b2eb9"
+    },
+    {
+      "result": "coil_table_001",
+      "format": "pdf",
+      "path": "coil_table_001.pdf",
+      "mime": "application/pdf",
+      "sha256": "f8f889c8947d1bed596e928a9d20bbc91ac04dc96f3fb46f6e73439ff5f9344b"
+    },
+    {
+      "result": "form_001",
+      "format": "xlsx",
+      "path": "form_001.xlsx",
+      "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "sha256": "d8d8ad2ef9407a7b3282f88644e714af1be955f47736ebe2ee310d8351e182c1"
+    },
+    {
+      "result": "form_001",
+      "format": "json",
+      "path": "form_001.json",
+      "mime": "application/json",
+      "sha256": "4a0c79719ffa48959268b4b093a16c4a43c9a9240e13f6c30113f7a49838b466"
+    },
+    {
+      "result": "form_001",
+      "format": "pdf",
+      "path": "form_001.pdf",
+      "mime": "application/pdf",
+      "sha256": "134bd9dbbbe2a6b6922270b2487567811df7ef86f52fb12a4605bba9442e3f72"
+    },
+    {
+      "result": "coil_table_001",
+      "format": "jpg",
+      "path": "coil_table_001.jpg",
+      "mime": "image/jpeg",
+      "sha256": "67c00691e1fe26225b5e02ba332e3c23a975ea729a3cd1f35dd7864c55c26edb"
+    },
+    {
+      "result": "form_001",
+      "format": "jpg",
+      "path": "form_001.jpg",
+      "mime": "image/jpeg",
+      "sha256": "67c00691e1fe26225b5e02ba332e3c23a975ea729a3cd1f35dd7864c55c26edb"
+    }
+  ],
+  "errors": [
+    "form_001.csv: [csv] no tables to export for 'form_001.csv'"
+  ],
+  "bundle": "bundle.zip",
+  "skipped": [
+    "form_001.csv: no tables in result (csv exporter requires tables)"
+  ]
+}

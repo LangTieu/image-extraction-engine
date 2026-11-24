@@ -110,7 +110,9 @@
         ]
       ],
       "cells": [],
-      "confidence": 1.0
+      "confidence": 1.0,
+      "needs_review": false,
+      "validation_results": []
     }
   ],
   "fields": [
@@ -120,7 +122,9 @@
       "raw_text": "H00003",
       "type": "id",
       "confidence": 1.0,
-      "needs_review": false
+      "needs_review": false,
+      "validation_results": [],
+      "proposals": []
     },
     {
       "name": "THICK",
@@ -129,7 +133,9 @@
       "unit": "mm",
       "type": "number",
       "confidence": 1.0,
-      "needs_review": false
+      "needs_review": false,
+      "validation_results": [],
+      "proposals": []
     }
   ],
   "validation_results": [],

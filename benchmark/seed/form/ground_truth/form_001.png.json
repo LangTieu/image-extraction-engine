@@ -82,7 +82,9 @@
       "raw_text": "Cong ty TNHH Thep Viet",
       "type": "string",
       "confidence": 1.0,
-      "needs_review": false
+      "needs_review": false,
+      "validation_results": [],
+      "proposals": []
     },
     {
       "name": "invoice_number",
@@ -90,7 +92,9 @@
       "raw_text": "2026/000123",
       "type": "id",
       "confidence": 1.0,
-      "needs_review": false
+      "needs_review": false,
+      "validation_results": [],
+      "proposals": []
     }
   ],
   "validation_results": [],
