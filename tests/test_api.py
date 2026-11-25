@@ -356,6 +356,14 @@ def _collect_ui_calls() -> set[tuple[str, str]]:
             calls.add((m.group(2).lower(), m.group(1)))
     for m in re.finditer(r"fetch\(\s*`([^`]+)`\s*\)", src):  # no-options fetch = GET
         calls.add(("get", m.group(1)))
+    # v0 api.ts funnels everything through requestJson(path, init) / request(BASE + path);
+    # recover (method, path) from the requestJson call sites: jsonBody(METHOD, ...) marks a
+    # write, an init object without a method is a GET.
+    for m in re.finditer(r"requestJson\(\s*`([^`]+)`\s*,\s*jsonBody\(\s*[\"'](\w+)", src):
+        if m.group(2).lower() in {"get", "post", "put", "patch", "delete"}:
+            calls.add((m.group(2).lower(), m.group(1)))
+    for m in re.finditer(r"requestJson\(\s*`([^`]+)`\s*,\s*\{\s*signal[^}]*\}\s*\)", src):
+        calls.add(("get", m.group(1)))
     return calls
 
 
@@ -378,6 +386,9 @@ def test_ui_routes_exist_on_backend() -> None:
     assert calls, "no fetch calls found in api.ts — parser or file changed?"
     for method, template in calls:
         path = re.sub(r"^\$\{BASE\}", "/v1", template)
+        # v0 templates are relative to BASE ("/v1", asserted by test_ui_api_base_path_is_v1).
+        if not path.startswith("/v1"):
+            path = "/v1" + path
         wildcard = re.sub(r"\$\{[^}]+\}", "*", path)
         match = any(
             m == method
