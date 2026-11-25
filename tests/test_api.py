@@ -438,8 +438,8 @@ def test_ui_handles_401_by_relocking() -> None:
     can use to show the unlock screen again."""
     api_src = _ui_src("api.ts")
     assert re.search(
-        r"status\s*(?:===|!==)\s*401", api_src
-    ), "api.ts must special-case a 401 response"
+        r"status\s*(?:===|!==)\s*HTTP_UNAUTHORIZED", api_src
+    ), "api.ts must recognize an unauthenticated response via HTTP_UNAUTHORIZED"
     assert "clearApiKey" in api_src, "a 401 must clear the stored key"
     assert "AUTH_ERROR_EVENT" in api_src or "auth-error" in api_src, (
         "a 401 must notify the app (custom event) so it can show the unlock screen"

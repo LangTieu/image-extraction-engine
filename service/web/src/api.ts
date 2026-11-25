@@ -197,9 +197,12 @@ function acquireSlot(): Promise<void> {
 
 /** localStorage key for the API key entered on the unlock screen. */
 export const API_KEY_STORAGE = 'iee_api_key'
-/** Fired (on window) when the API answers 401: the stored key was cleared and
- * the app must show the unlock screen again. */
+/** Fired (on window) when the API answers that the request is unauthenticated:
+ * the stored key was cleared and the app must show the unlock screen again. */
 export const AUTH_ERROR_EVENT = 'iee-auth-error'
+
+/** HTTP status meaning "credentials missing or invalid". */
+export const HTTP_UNAUTHORIZED = 401
 
 export function getApiKey(): string {
   try {
@@ -231,7 +234,7 @@ function authHeaders(): Record<string, string> {
 }
 
 function handleAuthFailure(status: number): void {
-  if (status !== 401) return
+  if (status !== HTTP_UNAUTHORIZED) return
   // The API rejected this request as unauthenticated: drop whatever key is
   // stored (a stale or wrong one) and let the app show the unlock screen.
   clearApiKey()
