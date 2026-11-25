@@ -24,8 +24,10 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
       - name: Type check (mypy)
-        run: mypy engine
+        run: mypy engine benchmark service tests
       - name: Unit tests
         run: pytest
       - name: Validate benchmark seed ground truth
         run: python -m benchmark.validate benchmark/seed
+      - name: Benchmark gate (CI subset)
+        run: python -m benchmark.run --quick --tag ci

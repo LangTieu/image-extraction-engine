@@ -1,0 +1,48 @@
+{
+  "git_sha": "2086dab8",
+  "git_branch": "p8-review",
+  "split_seed": 42,
+  "split": {
+    "dev": [
+      "/root/image-extraction-engine/benchmark/seed/coil_table/ground_truth/coil_table_002.png.json",
+      "/root/image-extraction-engine/benchmark/seed/coil_table/ground_truth/coil_table_003.png.json",
+      "/root/image-extraction-engine/benchmark/seed/coil_table/ground_truth/coil_table_004.png.json",
+      "/root/image-extraction-engine/benchmark/seed/industrial_hmi/ground_truth/industrial_hmi_003.png.json",
+      "/root/image-extraction-engine/benchmark/seed/industrial_hmi/ground_truth/industrial_hmi_005.png.json"
+    ],
+    "test": [
+      "/root/image-extraction-engine/benchmark/seed/coil_table/ground_truth/coil_table_001.png.json",
+      "/root/image-extraction-engine/benchmark/seed/coil_table/ground_truth/coil_table_005.png.json",
+      "/root/image-extraction-engine/benchmark/seed/industrial_hmi/ground_truth/industrial_hmi_001.png.json",
+      "/root/image-extraction-engine/benchmark/seed/industrial_hmi/ground_truth/industrial_hmi_002.png.json",
+      "/root/image-extraction-engine/benchmark/seed/industrial_hmi/ground_truth/industrial_hmi_004.png.json"
+    ]
+  },
+  "split_used": [
+    "dev",
+    "test"
+  ],
+  "categories": [
+    "coil_table",
+    "industrial_hmi"
+  ],
+  "variants": [
+    "default_tesseract"
+  ],
+  "args": {
+    "split": "all",
+    "seed": 42,
+    "category": null,
+    "variant": "default_tesseract",
+    "no_robustness": false,
+    "profile": false,
+    "quick": true,
+    "tag": "smoke_charts_only"
+  },
+  "environment": {
+    "python": "3.12.3",
+    "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.39",
+    "processors": 2,
+    "engine_version": "0.0.1"
+  }
+}
