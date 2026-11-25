@@ -7,6 +7,7 @@ Runs against a per-test temporary SQLite database + artifact dirs so the real
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import Generator
 from io import BytesIO
@@ -400,3 +401,39 @@ def test_ui_routes_exist_on_backend() -> None:
             for m, p in backend
         )
         assert match, f"UI calls {method.upper()} {template} but backend has no such route"
+
+
+def _ui_src(*relpath: str) -> str:
+    root = Path(__file__).resolve().parents[1] / "service" / "web" / "src"
+    return (root.joinpath(*relpath)).read_text()
+
+
+def test_ui_renders_text_blocks() -> None:
+    """Review/Results views must surface the API's text_blocks, not just fields and tables.
+
+    Fails on the pre-fix UI: api.ts never normalized `text_blocks` and no view referenced
+    text blocks, so extracted OCR text was invisible in the app.
+    """
+    api_src = _ui_src("api.ts")
+    assert "text_blocks" in api_src, "api.ts must normalize the API's text_blocks array"
+    assert "textBlocks" in api_src, "api.ts must expose textBlocks on ResultFile"
+    for view in ("views/ReviewView.tsx", "views/ResultsView.tsx"):
+        src = _ui_src(view)
+        assert "textBlocks" in src, f"{view} must render the file's textBlocks"
+
+
+def test_ui_timestamps_parse_naive_as_utc() -> None:
+    """Relative times must not skew by the viewer's UTC offset.
+
+    The store returns UTC timestamps without a timezone designator; the UI parsed them
+    with `new Date(iso)` (local time), so a UTC+7 viewer saw "7 h ago" on a fresh job.
+    """
+    util_src = _ui_src("util.ts")
+    assert "parseUtcDate" in util_src, "util.ts must define a shared UTC-aware timestamp parser"
+    time_ago_body = util_src.split("export function timeAgo")[1].split("export function")[0]
+    assert re.search(r"parseUtcDate\(", time_ago_body), "timeAgo must use parseUtcDate"
+    fmt_body = util_src.split("export function formatDateTime")[1].split("export function")[0]
+    assert re.search(r"parseUtcDate\(", fmt_body), "formatDateTime must use parseUtcDate"
+    # The parser must anchor timezone-less strings to UTC (append Z) and leave aware ones alone.
+    parser = util_src.split("export function parseUtcDate")[1].split("export function")[0]
+    assert "`${iso}Z`" in parser, "parseUtcDate must treat naive ISO strings as UTC"

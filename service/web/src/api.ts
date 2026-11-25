@@ -100,6 +100,16 @@ export interface Table {
   cells: Field[]
 }
 
+export interface TextBlock {
+  /** Unique within a result; used for selection in the UI. */
+  key: string
+  text: string
+  bbox: BBox | null
+  readingOrder: number | null
+  confidence: number | null
+  language: string | null
+}
+
 export interface ResultFile {
   id: string
   name: string
@@ -111,6 +121,7 @@ export interface ResultFile {
   height: number | null
   fields: Field[]
   tables: Table[]
+  textBlocks: TextBlock[]
 }
 
 export interface ExtractionResult {
@@ -381,8 +392,8 @@ function normalizeJob(raw: unknown): Job {
     id,
     status: text(obj, 'status', 'state') ?? 'queued',
     profile: text(obj, 'profile', 'profile_id', 'profile_name'),
-    createdAt: text(obj, 'created_at', 'created', 'submitted_at'),
-    updatedAt: text(obj, 'updated_at', 'finished_at', 'completed_at', 'updated'),
+    createdAt: normalizeTimestamp(text(obj, 'created_at', 'created', 'submitted_at')),
+    updatedAt: normalizeTimestamp(text(obj, 'updated_at', 'finished_at', 'completed_at', 'updated')),
     progress: normalizeProgress(obj),
     files,
     fileCount: files.length > 0 ? files.length : number(obj, 'file_count', 'total_files', 'files_total'),
@@ -539,6 +550,27 @@ function imageReference(obj: Rec): string | null {
   return /^(data:image\/|https?:\/\/|\/)/.test(ref) ? ref : null
 }
 
+function normalizeTimestamp(iso: string | null): string | null {
+  if (iso === null) return null
+  // The backend stores UTC, but (with the SQLite store) returns naive ISO strings without a
+  // timezone designator; `new Date(...)` then parses them as local time and every relative
+  // time is off by the viewer's UTC offset. Anchor timezone-less strings to UTC.
+  return /(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(iso) ? iso : `${iso}Z`
+}
+
+function normalizeTextBlock(raw: unknown, fileId: string, index: number): TextBlock {
+  const obj = isRecord(raw) ? raw : { text: raw }
+  // engine/schema TextBlock: text, bbox (x0,y0,x1,y1 pixels), reading_order, confidence, language.
+  return {
+    key: `${fileId}/b${index}`,
+    text: displayValue(obj.text ?? obj.value),
+    bbox: normalizeBBox(obj.bbox ?? obj.bounding_box ?? obj.box),
+    readingOrder: number(obj, 'reading_order', 'order', 'position'),
+    confidence: unitInterval(number(obj, 'confidence', 'score', 'conf')),
+    language: text(obj, 'language', 'lang'),
+  }
+}
+
 function normalizeResultFile(raw: unknown, index: number): ResultFile {
   const obj = isRecord(raw) ? raw : {}
   // GET /v1/jobs/{id}/result wraps each file: {file_id, file_name, status, result: {...}} —
@@ -561,6 +593,9 @@ function normalizeResultFile(raw: unknown, index: number): ResultFile {
       normalizeField(entry.raw, id, `${id}/f${i}`, entry.name),
     ),
     tables: tablesRaw.map((t, i) => normalizeTable(t, id, i)),
+    textBlocks: (list(inner, 'text_blocks').length > 0 ? list(inner, 'text_blocks') : list(obj, 'text_blocks')).map(
+      (b, i) => normalizeTextBlock(b, id, i),
+    ),
   }
 }
 
@@ -627,6 +662,7 @@ function mergeReview(result: ExtractionResult, reviewRaw: unknown): ExtractionRe
         height: null,
         fields: [],
         tables: [],
+        textBlocks: [],
       })
     }
     const owner = result.files.find((f) => f.id === incoming.fileId) ?? result.files[0]
