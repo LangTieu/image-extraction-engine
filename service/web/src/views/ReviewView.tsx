@@ -9,6 +9,7 @@ import {
   type Field,
   type Job,
   type ReviewAction,
+  type TextBlock,
 } from '../api'
 import { FieldList, type EditControls } from '../components/FieldList'
 import { ImageViewer, type OverlayBox, type Size } from '../components/ImageViewer'
@@ -16,7 +17,7 @@ import { Inspector } from '../components/Inspector'
 import { TableGrid } from '../components/TableGrid'
 import { EmptyState, Icon, JobPicker, Notice } from '../components/ui'
 import { routeHref, usePolling, useSourceImage, type PollState } from '../hooks'
-import { describeFile, isTypingTarget, shortId } from '../util'
+import { describeFile, isTypingTarget, percent, shortId } from '../util'
 
 export function ReviewView({ jobs, jobId }: { jobs: PollState<Job[]>; jobId: string | null }) {
   if (jobId === null) {
@@ -83,6 +84,13 @@ function ReviewWorkspace({ jobId, job }: { jobId: string; job: Job | null }) {
       if (first) {
         setFileIndex(first.fileIndex)
         setSelectedKey(first.item.key)
+      } else {
+        // No reviewable fields: fall back to the first extracted text block, if any.
+        const blockFile = loaded.data.files.find((f) => f.textBlocks.length > 0)
+        if (blockFile) {
+          setFileIndex(loaded.data.files.indexOf(blockFile))
+          setSelectedKey(blockFile.textBlocks[0].key)
+        }
       }
     }
   }
@@ -95,22 +103,52 @@ function ReviewWorkspace({ jobId, job }: { jobId: string; job: Job | null }) {
   const file = result?.files[fileIndex] ?? null
   const selectedEntry = order.find((e) => e.item.key === selectedKey) ?? null
   const selected = selectedEntry?.item ?? null
+  const selectedBlock = file?.textBlocks.find((b) => b.key === selectedKey) ?? null
   const image = useSourceImage(jobId, file)
+
+  // Blocks of the current file in reading order (missing reading_order keeps the API order).
+  const blockOrder = useMemo<TextBlock[]>(
+    () =>
+      file
+        ? file.textBlocks
+            .map((block, index) => ({ block, index }))
+            .sort((a, b) => (a.block.readingOrder ?? a.index) - (b.block.readingOrder ?? b.index))
+            .map(({ block }) => block)
+        : [],
+    [file],
+  )
 
   const boxes = useMemo<OverlayBox[]>(
     () =>
       file
-        ? allItems(file).flatMap((item) =>
-            item.bbox ? [{ key: item.key, bbox: item.bbox, tone: boxTone(item), label: `${item.name}: ${item.value}` }] : [],
-          )
+        ? [
+            // Draw text blocks first so reviewable field boxes render on top of them.
+            ...file.textBlocks.flatMap((block) =>
+              block.bbox
+                ? [{ key: block.key, bbox: block.bbox, tone: 'block' as const, label: `Text block: ${block.text}` }]
+                : [],
+            ),
+            ...allItems(file).flatMap((item) =>
+              item.bbox ? [{ key: item.key, bbox: item.bbox, tone: boxTone(item), label: `${item.name}: ${item.value}` }] : [],
+            ),
+          ]
         : [],
     [file],
   )
 
   function select(key: string) {
     const entry = order.find((e) => e.item.key === key)
-    if (!entry) return
-    setFileIndex(entry.fileIndex)
+    if (entry) {
+      setFileIndex(entry.fileIndex)
+      setSelectedKey(key)
+      setEditing(false)
+      setActionError(null)
+      return
+    }
+    // Text blocks are not review items; still let the image and list select them.
+    const blockFileIndex = result?.files.findIndex((f) => f.textBlocks.some((b) => b.key === key)) ?? -1
+    if (blockFileIndex === -1) return
+    setFileIndex(blockFileIndex)
     setSelectedKey(key)
     setEditing(false)
     setActionError(null)
@@ -354,7 +392,7 @@ function ReviewWorkspace({ jobId, job }: { jobId: string; job: Job | null }) {
                 onClick={() => {
                   setFileIndex(index)
                   setEditing(false)
-                  setSelectedKey(allItems(f).find(isPending)?.key ?? allItems(f)[0]?.key ?? null)
+                  setSelectedKey(allItems(f).find(isPending)?.key ?? allItems(f)[0]?.key ?? f.textBlocks[0]?.key ?? null)
                 }}
               >
                 <span className="file-tab-name">{f.name}</span>
@@ -398,6 +436,7 @@ function ReviewWorkspace({ jobId, job }: { jobId: string; job: Job | null }) {
         <aside className="review-side" aria-label="Review panel">
           <Inspector
             field={selectedEntry?.fileIndex === fileIndex ? selected : null}
+            block={selectedBlock}
             src={image.src}
             space={space}
             saving={saving}
@@ -408,6 +447,33 @@ function ReviewWorkspace({ jobId, job }: { jobId: string; job: Job | null }) {
             onUseAlternative={(value) => void act('correct', value)}
           />
           <FieldList fields={file.fields} selectedKey={selectedKey} onSelect={select} edit={edit} />
+          {file.textBlocks.length > 0 && (
+            <section className="panel" aria-label="Extracted text">
+              <div className="field-panel-head">
+                <h2 className="section-title">
+                  Extracted text <span className="pill pill-neutral">{file.textBlocks.length}</span>
+                </h2>
+              </div>
+              <ol className="text-blocks">
+                {blockOrder.map((block) => (
+                  <li key={block.key}>
+                    <button
+                      type="button"
+                      className={`text-block${block.key === selectedKey ? ' selected' : ''}`}
+                      onClick={() => select(block.key)}
+                    >
+                      <span className="mono text-block-text">{block.text === '' ? <span className="muted">(empty)</span> : block.text}</span>
+                      <span className="muted small">
+                        {block.readingOrder !== null && <span>#{block.readingOrder} </span>}
+                        {percent(block.confidence)}
+                        {block.language !== null && ` · ${block.language}`}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
           <p className="shortcuts">
             <kbd>N</kbd>/<kbd>P</kbd> next / previous flagged · <kbd>A</kbd> accept · <kbd>E</kbd> edit · <kbd>R</kbd> reject ·{' '}
             <kbd>1</kbd>–<kbd>9</kbd> use alternative · <kbd>+</kbd>/<kbd>−</kbd>/<kbd>0</kbd> zoom

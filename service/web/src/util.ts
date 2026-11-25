@@ -75,16 +75,26 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+/**
+ * Parse an ISO timestamp the backend sent. The store keeps UTC; when it returns a naive
+ * string without a timezone designator, `new Date(...)` would parse it as local time and
+ * skew every relative time by the viewer's UTC offset — so anchor those to UTC.
+ */
+export function parseUtcDate(iso: string): Date {
+  const anchored = /(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(iso) ? iso : `${iso}Z`
+  return new Date(anchored)
+}
+
 export function formatDateTime(iso: string | null): string {
   if (!iso) return 'Unknown'
-  const date = new Date(iso)
+  const date = parseUtcDate(iso)
   if (Number.isNaN(date.getTime())) return iso
   return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 export function timeAgo(iso: string | null): string {
   if (!iso) return ''
-  const date = new Date(iso)
+  const date = parseUtcDate(iso)
   if (Number.isNaN(date.getTime())) return iso
   const seconds = Math.round((Date.now() - date.getTime()) / 1000)
   if (seconds < 45) return 'just now'

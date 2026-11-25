@@ -10,7 +10,7 @@ export interface Size {
 export interface OverlayBox {
   key: string
   bbox: BBox
-  tone: 'plain' | 'pending' | 'ok' | 'rejected'
+  tone: 'plain' | 'pending' | 'ok' | 'rejected' | 'block'
   label: string
 }
 

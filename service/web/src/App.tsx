@@ -7,6 +7,9 @@ import { ReviewView } from './views/ReviewView'
 import { UploadView } from './views/UploadView'
 
 const JOBS_POLL_MS = 5_000
+/** Slower cadence while the user works on a review screen, so the badge stays fresh
+ * without stealing request budget from the review actions. */
+const JOBS_POLL_SLOW_MS = 30_000
 const HEALTH_POLL_MS = 60_000
 
 function NavLink({
@@ -46,7 +49,9 @@ export default function App() {
 
   // While a job is open in the review screen the request budget belongs to review actions.
   const reviewing = route.view === 'review' && route.jobId !== null
-  const jobs = usePolling('jobs', listJobs, JOBS_POLL_MS, reviewing)
+  // Keep polling (more slowly) while a review screen is open: the "n in progress" badge in the
+  // nav must reflect live job statuses, and pausing the poll left it stuck on stale counts.
+  const jobs = usePolling('jobs', listJobs, reviewing ? JOBS_POLL_SLOW_MS : JOBS_POLL_MS)
   const health = usePolling('health', getHealth, HEALTH_POLL_MS)
   const version = usePolling('version', getVersion, null)
 

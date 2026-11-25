@@ -346,7 +346,24 @@ function ResultFileCard({ file }: { file: ResultFile }) {
             </table>
           </div>
         ))}
-        {described.tone !== 'bad' && file.fields.length === 0 && file.tables.length === 0 && (
+        {file.textBlocks.length > 0 && (
+          <div>
+            <p className="label">Extracted text</p>
+            <ol className="text-blocks">
+              {file.textBlocks.map((block) => (
+                <li key={block.key}>
+                  <span className="mono text-block-text">{block.text === '' ? <span className="muted">(empty)</span> : block.text}</span>
+                  <span className="muted small">
+                    {' '}
+                    {percent(block.confidence)}
+                    {block.language !== null && ` · ${block.language}`}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+        {described.tone !== 'bad' && file.fields.length === 0 && file.tables.length === 0 && file.textBlocks.length === 0 && (
           <p className="muted">No fields were extracted from this file.</p>
         )}
       </div>

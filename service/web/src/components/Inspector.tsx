@@ -1,4 +1,4 @@
-import { isPending, type BBox, type Field } from '../api'
+import { isPending, type BBox, type Field, type TextBlock } from '../api'
 import { confidenceTone, humanize, percent, type Tone } from '../util'
 import { toPixels, type Size } from './ImageViewer'
 import { Badge, ProgressBar } from './ui'
@@ -37,6 +37,7 @@ function Crop({ src, space, bbox, label }: { src: string; space: Size; bbox: BBo
 
 export function Inspector({
   field,
+  block,
   src,
   space,
   saving,
@@ -47,6 +48,7 @@ export function Inspector({
   onUseAlternative,
 }: {
   field: Field | null
+  block?: TextBlock | null
   src: string | null
   space: Size | null
   saving: boolean
@@ -56,10 +58,47 @@ export function Inspector({
   onEdit: () => void
   onUseAlternative: (value: string) => void
 }) {
+  if (!field && block) {
+    // A text block is read-only OCR output, so there are no review actions here.
+    return (
+      <section className="inspector" aria-label="Selected item">
+        <div className="inspector-head">
+          <h2 className="inspector-title">Text block</h2>
+          {block.language !== null && <Badge tone="neutral">{block.language}</Badge>}
+        </div>
+
+        {src && space && block.bbox ? (
+          <Crop src={src} space={space} bbox={block.bbox} label={`text block ${block.readingOrder ?? ''}`.trim()} />
+        ) : (
+          <p className="muted small">{block.bbox ? 'No image available for a crop.' : 'This text block has no bounding box.'}</p>
+        )}
+
+        <div>
+          <p className="label">Extracted text</p>
+          <p className="inspector-value mono">{block.text === '' ? <span className="muted">(empty)</span> : block.text}</p>
+        </div>
+
+        <div>
+          <p className="label">
+            Confidence <span className={`tone-${confidenceTone(block.confidence)}`}>{percent(block.confidence)}</span>
+          </p>
+          {block.confidence !== null && (
+            <ProgressBar value={block.confidence} label="Confidence" tone={confidenceTone(block.confidence)} />
+          )}
+        </div>
+        {error && (
+          <p className="error-text" role="alert">
+            {error}
+          </p>
+        )}
+      </section>
+    )
+  }
+
   if (!field) {
     return (
       <section className="inspector" aria-label="Selected item">
-        <p className="muted">Select a field, a table cell or a box on the image to see its details.</p>
+        <p className="muted">Select a field, a table cell, a text block or a box on the image to see its details.</p>
       </section>
     )
   }
