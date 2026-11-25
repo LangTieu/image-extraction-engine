@@ -283,3 +283,32 @@ def test_orchestrator_bbox_original_through_homography():
 def test_orchestrator_requires_engine():
     with pytest.raises(ValueError):
         GeneralOCR([])
+
+
+# --- industrial pipeline: real photo must yield text (OCR-HMI fix) ----------
+
+
+def _hmi_like_image() -> np.ndarray:
+    """Rendered screen with several text lines (NOT a 1x1 placeholder)."""
+    img = Image.new("RGB", (640, 400), "white")
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((0, 0, 639, 399), outline="black", width=3)
+    for i, line in enumerate(
+        ("PUMP STATION 3", "MOTOR SPEED 1200 RPM", "TEMP 45.5 C", "ALARM: NONE")
+    ):
+        draw.text((20, 30 + i * 60), line, fill="black", font=_font(30))
+    return np.asarray(img)
+
+
+def test_industrial_vision_generic_hmi_returns_text_blocks():
+    from engine.industrial.pipeline import IndustrialVision
+    from engine.preprocessing.pipeline import PreprocessingPipeline
+
+    vision = IndustrialVision(
+        preprocessing=PreprocessingPipeline.from_dict("industrial", {}),
+        ocr=GeneralOCR([TesseractEngine()]),
+    )
+    result = vision.process(_hmi_like_image(), file_name="hmi.png")
+    assert result.text_blocks, "expected non-empty text_blocks for a text-bearing HMI image"
+    joined = " ".join(b.text for b in result.text_blocks)
+    assert "MOTOR" in joined and "1200" in joined

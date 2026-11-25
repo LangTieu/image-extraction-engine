@@ -38,6 +38,7 @@ from engine.schema import (
     ProcessingMeta,
     SourceInfo,
     Table,
+    TextBlock,
 )
 from engine.schema.industrial_fields import DEFAULT_FIELDS, validate_value
 
@@ -95,10 +96,14 @@ class IndustrialVision:
         warnings.extend(report.warnings)
         working = report.rectified
 
-        profile = match_profile(
-            self._ocr_text_shallow(working),
-            profiles=self._profile_pool(),
+        # One whole-frame OCR pass, shared by profile matching and (on the
+        # generic-HMI fallback) text_blocks. Running recognize_image twice
+        # doubled the wall time for no extra information.
+        ocr_document = self._ocr.recognize_image(working) if self._ocr is not None else None
+        profile_text = (
+            " ".join(t.text for t in ocr_document.tokens) if ocr_document else shallow_text(working)
         )
+        profile = match_profile(profile_text, profiles=self._profile_pool())
         if profile is None:
             warnings.append("NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing")
 
@@ -106,6 +111,29 @@ class IndustrialVision:
         tables = self._extract_coil_tables(working, profile, warnings)
         fields = self._extract_fields(working, regions, profile)
         alarm_entries = self._extract_alarms(working, regions)
+
+        # Generic-HMI fallback: heuristics found no typed regions (no
+        # LABEL_VALUE etc.), so without this the OCR text discovered above
+        # was thrown away and the result came back with zero text. The
+        # whole-frame blocks go into text_blocks; the OCR pass is reused,
+        # not repeated.
+        text_blocks: list[TextBlock] = []
+        if profile is None and ocr_document is not None:
+            for block in ocr_document.pages[0] if ocr_document.pages else []:
+                if not re.search(r"[A-Za-z0-9]", block.text):
+                    continue  # punctuation/noise-only lines from screen glare
+                text_blocks.append(
+                    TextBlock(
+                        text=block.text,
+                        bbox=BBox(
+                            x0=block.bbox[0], y0=block.bbox[1], x1=block.bbox[2], y1=block.bbox[3]
+                        )
+                        if block.bbox
+                        else None,
+                        reading_order=block.reading_order,
+                        confidence=block.confidence,
+                    )
+                )
 
         if any(f.needs_review for f in fields):
             # A field flagged by parse notes / format_regex failures must
@@ -123,6 +151,7 @@ class IndustrialVision:
             source=SourceInfo(file_name=file_name, page=1),
             tables=tables,
             fields=fields,
+            text_blocks=text_blocks,
             warnings=warnings,
             processing=ProcessingMeta(
                 pipeline_path=["industrial"],
