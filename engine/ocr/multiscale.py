@@ -16,21 +16,33 @@ def reocr_low_confidence(
     threshold: float = 0.6,
     scale: int = 2,
     min_roi_size: int = 8,
+    max_retries: int = 48,
 ) -> OCRResult:
     """Re-recognize every token below ``threshold`` from a 2x crop.
 
     The crop is taken with padding around the token bbox, OCR runs on the
     upscaled crop, and the best-scoring result (by mean confidence) replaces
     the original token's text, confidence and bbox (scaled back).
+
+    At most ``max_retries`` tokens are retried per call, lowest-confidence
+    first. Real photos of screens (glare, moiré) can mark hundreds of tokens
+    low-confidence; retrying each one took minutes of wall time while the
+    retries on unreadable glare crops almost never improved the text.
     """
     if not result.tokens:
         return result
     h, w = image.shape[:2]
+    low = sorted(
+        (t for t in result.tokens if t.confidence < threshold),
+        key=lambda t: t.confidence,
+    )
+    retry_set = {id(t) for t in low[:max_retries]}
     kept: list[OCRToken] = []
     for token in result.tokens:
-        if token.confidence >= threshold:
+        if token.confidence >= threshold or id(token) not in retry_set:
             kept.append(token)
             continue
+
         x0, y0, x1, y1 = token.bbox
         pad_x = max(4, (x1 - x0) * 0.5)
         pad_y = max(4, (y1 - y0) * 0.5)
