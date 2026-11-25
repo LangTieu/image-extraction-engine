@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -91,6 +93,30 @@ def get_session() -> Session:
     if _session_factory is None:
         _session_factory = sessionmaker(bind=get_engine(), expire_on_commit=False)
     return _session_factory()
+
+
+@contextmanager
+def session_scope() -> Iterator[Session]:
+    """Guarantee the Session's connection is returned to the pool.
+
+    Every caller must use this (or the FastAPI ``get_db`` dependency) instead of
+    a bare ``get_session()``: a session that is never closed keeps its
+    connection checked out and exhausts the QueuePool under load.
+    """
+    session = get_session()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+def get_db() -> Iterator[Session]:
+    """FastAPI dependency form of :func:`session_scope`."""
+    session = get_session()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 def dumps(value: Any) -> str:

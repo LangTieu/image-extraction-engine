@@ -17,14 +17,24 @@ from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import APIRouter, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from service.api.schemas import JobCreated, JobOut, JobStatus
-from service.core.db import JobFileModel, JobModel, get_session, new_id
+from service.core.db import JobFileModel, JobModel, get_db, new_id
 from service.core.settings import settings
 from service.core.status import derive_job_status
 from service.worker.runner import cancel_job, enqueue_job
@@ -76,22 +86,21 @@ _RATE_MAX_CLIENTS = 10_000  # hard cap on tracked clients (memory bound)
 # ---------------------------------------------------------------- helpers
 
 
-def _job_or_404(job_id: str) -> JobModel:
-    job = get_session().get(JobModel, job_id)
+def _job_or_404(job_id: str, session: Session) -> JobModel:
+    job = session.get(JobModel, job_id)
     if job is None:
         raise HTTPException(404, f"job {job_id} not found")
     return job
 
 
-def _file_or_404(job_id: str, file_id: str) -> JobFileModel:
-    jf = get_session().get(JobFileModel, file_id)
+def _file_or_404(job_id: str, file_id: str, session: Session) -> JobFileModel:
+    jf = session.get(JobFileModel, file_id)
     if jf is None or jf.job_id != job_id:
         raise HTTPException(404, f"file {file_id} not found in job {job_id}")
     return jf
 
 
-def _job_out(job: JobModel) -> JobOut:
-    session = get_session()
+def _job_out(job: JobModel, session: Session) -> JobOut:
     files = (
         session.query(JobFileModel)
         .filter(JobFileModel.job_id == job.id)
@@ -126,8 +135,7 @@ def _job_out(job: JobModel) -> JobOut:
     )
 
 
-def _refresh_job_status(job_id: str) -> None:
-    session = get_session()
+def _refresh_job_status(job_id: str, session: Session) -> None:
     job = session.get(JobModel, job_id)
     if job is None:
         return
@@ -149,6 +157,7 @@ def create_job(
     category: str | None = Query(default=None, description="forced document category"),
     languages: str | None = Query(default=None, description="OCR languages, e.g. vi+en"),
     export_formats: str | None = Query(default="xlsx,json", description="comma separated"),
+    session: Session = Depends(get_db),
 ):
     """Upload one or more images/PDFs and queue an extraction job."""
     if not files:
@@ -173,7 +182,6 @@ def create_job(
         mime = up.content_type or "application/octet-stream"
         payloads.append((up.filename or "upload", mime, data))
 
-    session = get_session()
     options: dict = {
         "category": category,
         "languages": languages,
@@ -221,9 +229,9 @@ def create_job(
 def list_jobs(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    session: Session = Depends(get_db),
 ):
     """Most recent jobs, newest first (paginated: review finding #14)."""
-    session = get_session()
     jobs = (
         session.query(JobModel)
         .order_by(JobModel.created_at.desc())
@@ -231,19 +239,19 @@ def list_jobs(
         .limit(limit)
         .all()
     )
-    return [_job_out(j) for j in jobs]
+    return [_job_out(j, session) for j in jobs]
 
 
 @router.get("/jobs/{job_id}", response_model=JobOut)
-def get_job(job_id: str):
-    return _job_out(_job_or_404(job_id))
+def get_job(job_id: str, session: Session = Depends(get_db)):
+    return _job_out(_job_or_404(job_id, session), session)
 
 
 @router.get("/jobs/{job_id}/result")
-def get_result(job_id: str):
+def get_result(job_id: str, session: Session = Depends(get_db)):
     """Unified JSON result of every file in the job."""
-    job = _job_or_404(job_id)
-    out = _job_out(job)
+    job = _job_or_404(job_id, session)
+    out = _job_out(job, session)
     return {
         "job_id": job.id,
         "status": job.status,
@@ -261,9 +269,9 @@ def get_result(job_id: str):
 
 
 @router.post("/jobs/{job_id}/cancel")
-def cancel(job_id: str):
+def cancel(job_id: str, session: Session = Depends(get_db)):
     """Cancel a queued/running job (best effort for the in-process worker)."""
-    job = _job_or_404(job_id)
+    job = _job_or_404(job_id, session)
     if job.status in ("completed", "failed"):
         raise HTTPException(409, f"job already {job.status}")
     cancel_job(job.id)
@@ -271,10 +279,9 @@ def cancel(job_id: str):
 
 
 @router.get("/jobs/{job_id}/review")
-def pending_review(job_id: str):
+def pending_review(job_id: str, session: Session = Depends(get_db)):
     """Fields and cells flagged for review, per file."""
-    _job_or_404(job_id)
-    session = get_session()
+    _job_or_404(job_id, session)
     files = session.query(JobFileModel).filter(JobFileModel.job_id == job_id).all()
     items = []
     for f in files:
@@ -296,7 +303,7 @@ def pending_review(job_id: str):
 
 
 @router.patch("/jobs/{job_id}/fields/{field_id}")
-def review_field(job_id: str, field_id: str, body: dict):
+def review_field(job_id: str, field_id: str, body: dict, session: Session = Depends(get_db)):
     """accept | correct | reject one field; re-validates and appends audit log."""
     action = body.get("action")
     value = body.get("value")
@@ -305,7 +312,6 @@ def review_field(job_id: str, field_id: str, body: dict):
     if action == "correct" and value is None:
         raise HTTPException(422, "correct requires body.value")
 
-    session = get_session()
     target: dict[str, Any] | None = None
     jf: JobFileModel | None = None
     for f in session.query(JobFileModel).filter(JobFileModel.job_id == job_id).all():
@@ -343,17 +349,17 @@ def review_field(job_id: str, field_id: str, body: dict):
     flag_modified(jf, "result_json")
     jf.status = "needs_review" if any(x.get("needs_review") for x in fields) else "completed"
     session.commit()
-    _refresh_job_status(job_id)
+    _refresh_job_status(job_id, session)
     return {"job_id": job_id, "field_id": field_id, "action": action, "status": jf.status}
 
 
 @router.post("/jobs/{job_id}/exports")
-def create_exports(job_id: str, body: dict | None = None):
+def create_exports(job_id: str, body: dict | None = None, session: Session = Depends(get_db)):
     """(Re)build exports for all files of the job in the requested formats."""
     formats = (body or {}).get("formats") or ["xlsx", "json"]
     from service.worker.runner import build_exports
 
-    job = _job_or_404(job_id)
+    job = _job_or_404(job_id, session)
     if job.status not in ("completed", "needs_review"):
         raise HTTPException(409, "job has no finished results to export yet")
     done = build_exports(job_id, formats)
@@ -361,12 +367,11 @@ def create_exports(job_id: str, body: dict | None = None):
 
 
 @router.get("/jobs/{job_id}/exports/{fmt}")
-def export_file(job_id: str, fmt: str):
+def export_file(job_id: str, fmt: str, session: Session = Depends(get_db)):
     """Download one exported artifact (xlsx|csv|json|pdf) for one file."""
     if fmt not in ("xlsx", "csv", "json", "pdf"):
         raise HTTPException(422, "fmt must be one of xlsx|csv|json|pdf")
-    _job_or_404(job_id)
-    session = get_session()
+    _job_or_404(job_id, session)
     for f in session.query(JobFileModel).filter(JobFileModel.job_id == job_id).all():
         info = (f.exports or {}).get(fmt)
         if info is None:
@@ -393,8 +398,7 @@ def list_profiles():
 
 
 @router.get("/health")
-def health():
-    session = get_session()
+def health(session: Session = Depends(get_db)):
     return {
         "status": "ok",
         "jobs": session.query(JobModel).count(),

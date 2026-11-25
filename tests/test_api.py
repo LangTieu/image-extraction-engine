@@ -293,6 +293,26 @@ def api_key_client(
         db_mod._engine.dispose()
 
 
+def test_no_session_leak_under_repeated_polling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: UI polling must not exhaust the SQLAlchemy connection pool.
+
+    Reproduces the live incident: every DB endpoint leaked one Session per call
+    (no ``close()`` anywhere), so ~15 requests exhausted the 5+10 QueuePool and
+    the API started returning 500s. Hits the REAL session path (no dependency
+    override) 30+ times and requires 200 on every response.
+    """
+    client = _make_client(tmp_path, monkeypatch)
+    job_id = _post_job(client)
+    _poll_job(client, job_id)
+    for _ in range(35):
+        resp_list = client.get("/v1/jobs")
+        resp_one = client.get(f"/v1/jobs/{job_id}")
+        assert resp_list.status_code == 200, resp_list.text
+        assert resp_one.status_code == 200, resp_one.text
+
+
 def test_auth_missing_wrong_and_correct_key(api_key_client: TestClient) -> None:
     assert api_key_client.get("/v1/version").status_code == 401
     assert (
