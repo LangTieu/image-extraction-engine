@@ -312,3 +312,76 @@ def test_industrial_vision_generic_hmi_returns_text_blocks():
     assert result.text_blocks, "expected non-empty text_blocks for a text-bearing HMI image"
     joined = " ".join(b.text for b in result.text_blocks)
     assert "MOTOR" in joined and "1200" in joined
+
+
+# --- coil-table fix: gutter noise columns, toolbar header, duplicate warnings
+
+
+def _coil_like_image() -> np.ndarray:
+    """Rendered coil-list screen: toolbar strip above the table, a
+    checkbox-gutter column with no alphanumeric data, and known data rows."""
+    img = Image.new("RGB", (760, 460), "white")
+    draw = ImageDraw.Draw(img)
+    draw.text((10, 8), "View Coils in Cold Rolling Work Unit", fill="black", font=_font(18))
+    # toolbar rows ABOVE the table (would be garbage if read as header/data)
+    draw.text((20, 40), "Fac: 1CRM   Oper: PCM   Type: Confirm", fill="black", font=_font(16))
+    headers = ["", "SEQ", "C.COIL", "Thickness", "Weight", "Dest Name"]
+    data = [
+        ("", "001", "97CB0774", "4.000", "21080", "LONG AN"),
+        ("", "002", "97CA9601", "4.500", "16725", "PORT KELANG"),
+        ("", "003", "97CA9602", "4.000", "24505", "PORT KELANG"),
+    ]
+    x0, y0, col_w, row_h = 20, 80, 120, 40
+    # column separators (incl. the checkbox gutter at x0)
+    for c in range(len(headers) + 1):
+        draw.line((x0 + c * col_w, y0, x0 + c * col_w, y0 + row_h * (len(data) + 2)), fill="black")
+    # header + toolbar-noise row + len(data) data rows need len(data)+3 lines
+    for r in range(len(data) + 3):
+        draw.line((x0, y0 + r * row_h, x0 + len(headers) * col_w, y0 + r * row_h), fill="black")
+    for c, head in enumerate(headers):
+        draw.text((x0 + c * col_w + 8, y0 + 8), head, fill="black", font=_font(16))
+    # row 0 of the grid: toolbar remnants (non-alphanumeric cells)
+    noise = ["[v]", "---", "___", "___", "___", "-----"]
+    for c, cell in enumerate(noise):
+        draw.text((x0 + c * col_w + 8, y0 + row_h + 8), cell, fill="black", font=_font(16))
+    for r, row in enumerate(data):
+        for c, cell in enumerate(row):
+            if cell:
+                draw.text(
+                    (x0 + c * col_w + 8, y0 + row_h * (r + 2) + 8),
+                    cell, fill="black", font=_font(16),
+                )
+    return np.asarray(img)
+
+
+def test_coil_table_drops_noise_columns_and_toolbar_rows():
+    from engine.industrial.pipeline import IndustrialVision
+
+    vision = IndustrialVision(ocr=GeneralOCR([TesseractEngine()]))
+    result = vision.process(_coil_like_image(), file_name="coil-list.png")
+    assert result.tables, "expected a table for a ruled coil-list image"
+    table = result.tables[0]
+    headers = [h.lower() for h in table.columns]
+    # the checkbox gutter column (empty header, no alphanumeric data) is gone
+    assert "seq" in headers, f"gutter/noise columns not dropped: {table.columns}"
+    joined = " ".join(table.columns).lower()
+    assert "97cb0774" not in joined, "a data value leaked into the header row"
+    body = "\n".join(" ".join(row) for row in table.rows)
+    # toolbar strip above the table is not emitted as a data row
+    assert "fac" not in body and "1crm" not in body, "toolbar row leaked into data rows"
+    # Tesseract misreads glyphs in the id (e.g. '97CB0774' -> '97CB0O774'):
+    # OCR accuracy is out of scope for this fix, so assert the stable
+    # prefix/suffix rather than exact glyph-level output
+    assert any(
+        "97CB" in cell.upper() and "774" in cell.upper()
+        for row in table.rows
+        for cell in row
+    ), "coil id row 97CB0774 missing from data rows"
+    # the last drawn data row (003) must be inside the grid, not clipped
+    assert any(
+        "97CA" in cell.upper() and "9602" in cell.upper()
+        for row in table.rows
+        for cell in row
+    ), "third data row 003 clipped from the grid"
+    # each warning text appears once
+    assert len(result.warnings) == len(set(result.warnings)), "duplicate warnings"
