@@ -120,7 +120,8 @@ class PreprocessingPipeline:
         params = self.steps.get("rotate")
         if params:
             working, matrix = tx.rotate(working, tx.RotateConfig(**params))
-            log.add("rotate", matrix, angle=float(params["angle"]) if params.get("angle") is not None else 0.0)
+            angle = float(params["angle"]) if params.get("angle") is not None else 0.0
+            log.add("rotate", matrix, angle=angle)
 
         params = self.steps.get("orientation")
         if params:
