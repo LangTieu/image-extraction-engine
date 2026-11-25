@@ -231,10 +231,11 @@ function authHeaders(): Record<string, string> {
 }
 
 function handleAuthFailure(status: number): void {
-  if (status === 401 && getApiKey() !== '') {
-    clearApiKey()
-    window.dispatchEvent(new Event(AUTH_ERROR_EVENT))
-  }
+  if (status !== 401) return
+  // The API rejected this request as unauthenticated: drop whatever key is
+  // stored (a stale or wrong one) and let the app show the unlock screen.
+  clearApiKey()
+  window.dispatchEvent(new Event(AUTH_ERROR_EVENT))
 }
 
 /* ------------------------------------------------------------------ */
