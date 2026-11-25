@@ -162,7 +162,9 @@ def render_scene(gt: ExtractionResult) -> np.ndarray:
         cell_h = 44
         line = (255, 255, 255) if dark else (60, 60, 60)
         for r in range(n_rows + 1):
-            draw.rectangle([80, y + r * cell_h, 80 + n_cols * cell_w, y + r * cell_h + 2], fill=line)
+            draw.rectangle(
+                [80, y + r * cell_h, 80 + n_cols * cell_w, y + r * cell_h + 2], fill=line
+            )
         for c in range(n_cols + 1):
             draw.rectangle([80 + c * cell_w, y, 82 + c * cell_w, y + n_rows * cell_h], fill=line)
         grid = ([cols] if cols else []) + data
@@ -192,7 +194,7 @@ class PipelineVariant:
     ocr_kind: str = "tesseract"
     preprocess: bool = True
 
-    def build(self) -> "PipelineVariantRunner":
+    def build(self) -> PipelineVariantRunner:
         preprocessing = (
             PreprocessingPipeline.for_profile("screenshot")
             if self.preprocess
@@ -260,6 +262,8 @@ def score_sample(
 ) -> dict[str, object]:
     gold = gt_field_map(gt)
     got = predict_field_map(pred)
+    got_str: dict[str, str] = {k: str(v) for k, v in got.items()}
+    gold_vals: dict[str, str | float | int] = dict(gold)
     field_hits = {k: _values_equal(v, got[k]) for k, v in gold.items() if k in got}
     missing = [k for k in gold if k not in got]
     extra = [k for k in got if k not in gold]
@@ -302,10 +306,10 @@ def score_sample(
         "field_wrong": wrong,
         "wrong_flagged": wrong_flagged,
         "field_extra": extra,
-        "field_accuracy": field_accuracy(gold, {k: got.get(k, "") for k in gold}),
+        "field_accuracy": field_accuracy(gold_vals, {k: got_str.get(k, "") for k in gold}),
         "coil_id_accuracy": coil_id_accuracy(
-            {k: v for k, v in gold.items() if k in COIL_ID_FIELDS},
-            got,
+            {k: str(v) for k, v in gold.items() if k in COIL_ID_FIELDS},
+            got_str,
         ),
         "table_cells_ref": len(ref_cells),
         "table_structure_f1": structure.adjacency.f1 if ref_cells else None,
@@ -323,8 +327,8 @@ def aggregate_text_cer_wer(
     cer_wer: list[tuple[float, float]],
 ) -> dict[str, float]:
     """Corpus-level CER (char-weighted) and mean WER from OCR stage scores."""
-    chars = sum(int(s["gt_text_chars"]) for s in samples) or 1
-    cer = sum(c * int(s["gt_text_chars"]) for (c, _w), s in zip(cer_wer, samples)) / chars
+    chars = sum(int(str(s["gt_text_chars"])) for s in samples) or 1
+    cer = sum(c * int(str(s["gt_text_chars"])) for (c, _w), s in zip(cer_wer, samples)) / chars
     wer = float(np.mean([w for _c, w in cer_wer])) if cer_wer else 0.0
     return {"cer": float(cer), "wer": wer}
 
@@ -385,7 +389,15 @@ def expected_calibration_error(
         avg_conf = float(conf[mask].mean())
         weight = int(mask.sum()) / len(conf)
         ece += weight * abs(acc - avg_conf)
-        bins.append({"low": lo, "high": hi, "count": int(mask.sum()), "accuracy": acc, "confidence": avg_conf})
+        bins.append(
+            {
+                "low": lo,
+                "high": hi,
+                "count": int(mask.sum()),
+                "accuracy": acc,
+                "confidence": avg_conf,
+            }
+        )
     return {"ece": float(ece), "bins": bins}
 
 

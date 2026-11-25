@@ -26,7 +26,6 @@ from pathlib import Path
 import numpy as np
 
 from benchmark.harness import (
-    INDUSTRIAL_CATEGORIES,
     VARIANTS,
     PipelineVariant,
     aggregate_text_cer_wer,
@@ -47,6 +46,19 @@ from benchmark.robustness import (
 )
 from engine.metrics import cer as cer_metric
 from engine.metrics import wer as wer_metric
+
+
+def fnum(s: dict[str, object], key: str) -> float:
+    value = s[key]
+    assert isinstance(value, (int, float, bool, str))
+    return float(value)
+
+
+def flist(s: dict[str, object], key: str) -> list[object]:
+    value = s[key]
+    assert isinstance(value, list)
+    return value
+
 
 ARTIFACTS = Path(__file__).parent / "artifacts"
 PRIMARY_GATES = {
@@ -91,47 +103,55 @@ def run_variant(
         per_sample.append(scores)
 
     text = aggregate_text_cer_wer(per_sample, cer_wer)
-    route_acc = float(np.mean([s["route_ok"] for s in per_sample])) if per_sample else 0.0
-    field_acc = float(np.mean([s["field_accuracy"] for s in per_sample])) if per_sample else 0.0
+
+    route_acc = float(np.mean([fnum(s, "route_ok") for s in per_sample])) if per_sample else 0.0
+    field_acc = (
+        float(np.mean([fnum(s, "field_accuracy") for s in per_sample])) if per_sample else 0.0
+    )
     structure = [
-        s["table_structure_f1"] for s in per_sample if s["table_structure_f1"] is not None
+        fnum(s, "table_structure_f1")
+        for s in per_sample
+        if s["table_structure_f1"] is not None
     ]
-    latencies = [float(s["elapsed_ms"]) for s in per_sample]
+    latencies = [fnum(s, "elapsed_ms") for s in per_sample]
 
     conf: list[float] = []
     corr: list[bool] = []
     wrong_flagged = wrong_total = 0
     for s in per_sample:
-        conf.extend(s["field_confidences"])  # type: ignore[arg-type]
-        corr.extend(s["field_correctness"])  # type: ignore[arg-type]
-        wrong_total += len(s["field_wrong"])  # type: ignore[arg-type]
-        wrong_flagged += len(s["wrong_flagged"])  # type: ignore[arg-type]
+        conf.extend(float(str(c)) for c in flist(s, "field_confidences"))
+        corr.extend(bool(c) for c in flist(s, "field_correctness"))
+        wrong_total += len(flist(s, "field_wrong"))
+        wrong_flagged += len(flist(s, "wrong_flagged"))
     calibration = expected_calibration_error(conf, corr)
 
     per_category: dict[str, dict[str, float]] = {}
-    for category in sorted({s["category"] for s in per_sample}):  # type: ignore[union-attr]
+    categories: list[str] = sorted({str(s["category"]) for s in per_sample})
+    for category in categories:
         rows = [s for s in per_sample if s["category"] == category]
         per_category[category] = {
             "n": len(rows),
-            "route_accuracy": float(np.mean([r["route_ok"] for r in rows])),
-            "field_accuracy": float(np.mean([r["field_accuracy"] for r in rows])),
-            "coil_id_accuracy": float(np.mean([r["coil_id_accuracy"] for r in rows])),
-            "cer": float(np.mean([r["cer"] for r in rows])),
-            "mean_ms": float(np.mean([r["elapsed_ms"] for r in rows])),
+            "route_accuracy": float(np.mean([fnum(r, "route_ok") for r in rows])),
+            "field_accuracy": float(np.mean([fnum(r, "field_accuracy") for r in rows])),
+            "coil_id_accuracy": float(np.mean([fnum(r, "coil_id_accuracy") for r in rows])),
+            "cer": float(np.mean([fnum(r, "cer") for r in rows])),
+            "mean_ms": float(np.mean([fnum(r, "elapsed_ms") for r in rows])),
         }
 
-    field_ci = bootstrap_ci([float(s["field_accuracy"]) for s in per_sample])
+    field_ci = bootstrap_ci([fnum(s, "field_accuracy") for s in per_sample])
+    struct_mean = float(np.mean(structure)) if structure else None
+    structure_f1: float | None = struct_mean
     return {
         "variant": variant_name,
         "n_samples": len(per_sample),
         "route_accuracy": route_acc,
         "field_accuracy": field_acc,
-        "coil_id_accuracy": float(np.mean([s["coil_id_accuracy"] for s in per_sample]))
+        "coil_id_accuracy": float(np.mean([fnum(s, "coil_id_accuracy") for s in per_sample]))
         if per_sample
         else 0.0,
         "cer": text["cer"],
         "wer": text["wer"],
-        "table_structure_f1": float(np.mean(structure)) if structure else None,
+        "table_structure_f1": structure_f1,
         "latency": bootstrap_ci(latencies, statistic="median"),
         "batch_ms": float(sum(latencies)),
         "throughput_img_per_s": len(latencies) / (sum(latencies) / 1000) if latencies else 0.0,
@@ -163,9 +183,9 @@ def run_robustness(
             for entry in samples:
                 gt = load_gt(entry["gt"])
                 image = fn(render_scene(gt), severity)
-                pred, _ms = runner.process(image, file_name=Path(entry["gt"]).stem)
+                pred, _ms = runner.process(image, file_name=Path(str(entry["gt"])).stem)
                 scores = score_sample(gt, pred, 0.0)
-                accs.append(float(scores["field_accuracy"]))
+                accs.append(fnum(scores, "field_accuracy"))
             severities.append(
                 {
                     "severity": severity,
@@ -176,7 +196,7 @@ def run_robustness(
         curves[name] = {
             "curve": severities,
             "breakdown_severity": breakdown_severity(
-                [s["field_accuracy"] for s in severities], clean
+                [float(s["field_accuracy"]) for s in severities], clean
             ),
         }
     return {"variant": variant_name, "breakdown_drop": BREAKDOWN_DROP, "curves": curves}
@@ -230,7 +250,9 @@ def run_performance(
 
 
 def analyze_errors(run_result: dict[str, object]) -> dict[str, object]:
-    samples = run_result["samples"]  # type: ignore[index]
+    samples_obj = run_result["samples"]
+    assert isinstance(samples_obj, list)
+    samples: list[dict[str, object]] = samples_obj
     groups: dict[str, list[dict[str, object]]] = {
         "routing_mismatch": [],
         "field_missing": [],
@@ -245,20 +267,39 @@ def analyze_errors(run_result: dict[str, object]) -> dict[str, object]:
             groups["routing_mismatch"].append(
                 {**entry, "gt": s["gt_type"], "pred": s["pred_type"]}
             )
-        for name in s["field_missing"]:
+        missing = s["field_missing"]
+        assert isinstance(missing, list)
+        for name in missing:
             groups["field_missing"].append({**entry, "field": name})
-        for name in s["field_wrong"]:
+        wrong = s["field_wrong"]
+        assert isinstance(wrong, list)
+        fields_gold = s["fields_gold"]
+        assert isinstance(fields_gold, dict)
+        fields_pred = s["fields_pred"]
+        assert isinstance(fields_pred, dict)
+        for name in wrong:
             groups["field_wrong"].append(
-                {**entry, "field": name, "gt": s["fields_gold"].get(name), "pred": s["fields_pred"].get(name)}
+                {
+                    **entry,
+                    "field": name,
+                    "gt": fields_gold.get(name),
+                    "pred": fields_pred.get(name),
+                }
             )
-        for name in s["field_extra"]:
+        extra = s["field_extra"]
+        assert isinstance(extra, list)
+        for name in extra:
             groups["field_extra"].append({**entry, "field": name})
-        if s["table_structure_f1"] is not None and s["table_structure_f1"] < 0.5:
+        structure_f1 = s["table_structure_f1"]
+        cer = s["cer"]
+        assert isinstance(structure_f1, (int, float)) or structure_f1 is None
+        assert isinstance(cer, (int, float))
+        if structure_f1 is not None and structure_f1 < 0.5:
             groups["table_structure"].append(
-                {**entry, "structure_f1": s["table_structure_f1"]}
+                {**entry, "structure_f1": structure_f1}
             )
-        if s["cer"] > 0.3:
-            groups["high_cer"].append({**entry, "cer": s["cer"]})
+        if cer > 0.3:
+            groups["high_cer"].append({**entry, "cer": cer})
     return {
         "counts": {k: len(v) for k, v in groups.items()},
         "groups": groups,
@@ -267,12 +308,24 @@ def analyze_errors(run_result: dict[str, object]) -> dict[str, object]:
 
 
 NEXT_STEPS = {
-    "routing_mismatch": "Extend router rules / profile keywords for the missed categories (engine/router/router.py).",
-    "field_missing": "Check profile field regexes and region detection coverage for the listed fields (engine/industrial).",
-    "field_wrong": "Tune OCR for numeric fields and unit parsing; most wrong values are OCR-level (see high_cer).",
-    "field_extra": "Suppress hallucinated fields: require profile header match before emitting a field.",
-    "table_structure": "Prefer the ruled backend on ruled coil tables; tune ruled_line_scale / cluster_gap_factor.",
-    "high_cer": "Preprocessing profile for dark HMI scenes (invert/contrast) is the highest-leverage fix.",
+    "routing_mismatch": (
+        "Extend router rules / profile keywords for the missed categories (engine/router)."
+    ),
+    "field_missing": (
+        "Check profile field regexes and region detection coverage (engine/industrial)."
+    ),
+    "field_wrong": (
+        "Tune OCR for numeric fields and unit parsing; most errors are OCR-level (see high_cer)."
+    ),
+    "field_extra": (
+        "Suppress hallucinated fields: require profile header match before emitting a field."
+    ),
+    "table_structure": (
+        "Prefer the ruled backend on ruled coil tables; tune ruled_line_scale / cluster_gap_factor."
+    ),
+    "high_cer": (
+        "Preprocessing profile for dark HMI scenes (invert/contrast) is the highest-leverage fix."
+    ),
 }
 
 
@@ -289,12 +342,24 @@ def write_charts(out_dir: Path, metrics: dict[str, object], robustness: dict[str
     reports = out_dir / "reports"
     reports.mkdir(parents=True, exist_ok=True)
 
-    variants = [v for v in metrics["variants"].values() if v["n_samples"]]  # type: ignore[union-attr]
+    variants_map = metrics["variants"]
+    assert isinstance(variants_map, dict)
+    variants = [v for v in variants_map.values() if v["n_samples"]]
     names = [v["variant"] for v in variants]
     x = range(len(variants))
     fig, ax = plt.subplots(figsize=(8, 4))
-    ax.bar([i - 0.2 for i in x], [v["field_accuracy"] for v in variants], width=0.4, label="field_accuracy")
-    ax.bar([i + 0.2 for i in x], [v["route_accuracy"] for v in variants], width=0.4, label="route_accuracy")
+    ax.bar(
+        [i - 0.2 for i in x],
+        [v["field_accuracy"] for v in variants],
+        width=0.4,
+        label="field_accuracy",
+    )
+    ax.bar(
+        [i + 0.2 for i in x],
+        [v["route_accuracy"] for v in variants],
+        width=0.4,
+        label="route_accuracy",
+    )
     ax.set_xticks(list(x))
     ax.set_xticklabels(names, rotation=20, ha="right", fontsize=8)
     ax.set_ylim(0, 1)
@@ -304,9 +369,11 @@ def write_charts(out_dir: Path, metrics: dict[str, object], robustness: dict[str
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(8, 4.5))
-    for name, curve in robustness["curves"].items():  # type: ignore[union-attr]
-        sev = [p["severity"] for p in curve["curve"]]  # type: ignore[union-attr]
-        acc = [p["field_accuracy"] for p in curve["curve"]]  # type: ignore[union-attr]
+    curves_map = robustness.get("curves", {})
+    assert isinstance(curves_map, dict)
+    for name, curve in curves_map.items():
+        sev = [p["severity"] for p in curve["curve"]]
+        acc = [p["field_accuracy"] for p in curve["curve"]]
         ax.plot(sev, acc, marker="o", label=name)
     ax.set_xlabel("severity")
     ax.set_ylabel("field accuracy")
@@ -316,7 +383,7 @@ def write_charts(out_dir: Path, metrics: dict[str, object], robustness: dict[str
     fig.savefig(reports / "robustness_curves.png", dpi=140)
     plt.close(fig)
 
-    default = metrics["variants"].get("default_tesseract")  # type: ignore[union-attr]
+    default = variants_map.get("default_tesseract")
     if default and default["n_samples"]:
         lat = [s["elapsed_ms"] for s in default["samples"]]
         fig, ax = plt.subplots(figsize=(6, 4))
@@ -344,13 +411,14 @@ def write_charts(out_dir: Path, metrics: dict[str, object], robustness: dict[str
 
 def check_gates(metrics: dict[str, object]) -> list[str]:
     failures: list[str] = []
-    default = metrics["variants"].get("default_tesseract")  # type: ignore[union-attr]
+    variants_map = metrics["variants"]
+    assert isinstance(variants_map, dict)
+    default = variants_map.get("default_tesseract")
     if not default or not default["n_samples"]:
         return ["default variant produced no samples"]
     for key, threshold in PRIMARY_GATES.items():
         value = default[key]
-        if value is None:
-            continue
+        assert isinstance(value, float)
         if key == "cer" and value > threshold:
             failures.append(f"gate {key}={value:.3f} > {threshold}")
         elif key != "cer" and value < threshold:
@@ -370,7 +438,9 @@ def main() -> int:
     parser.add_argument("--variant", default=None, help="limit to one variant")
     parser.add_argument("--no-robustness", action="store_true")
     parser.add_argument("--profile", action="store_true", help="cProfile the run")
-    parser.add_argument("--quick", action="store_true", help="CI subset: industrial categories, no robustness")
+    parser.add_argument(
+        "--quick", action="store_true", help="CI subset: industrial categories, no robustness"
+    )
     parser.add_argument("--tag", default=None, help="artifact dir name (default: timestamp)")
     args = parser.parse_args()
 
@@ -393,15 +463,21 @@ def main() -> int:
     for name in variant_names:
         started = time.perf_counter()
         variants_out[name] = run_variant(name, samples, category_filter=args.category)
+        default = variants_out.get("default_tesseract") or variants_out[variant_names[0]]
+        assert default is not None
+        samples_list = default["samples"]
+        assert isinstance(samples_list, list)
+        mean_ms = float(np.mean([fnum(s, "elapsed_ms") for s in samples_list]))
         print(
             f"[{name}] field_acc={variants_out[name]['field_accuracy']:.3f} "
             f"route_acc={variants_out[name]['route_accuracy']:.3f} "
             f"cer={variants_out[name]['cer']:.3f} "
-            f"mean_ms={np.mean([s['elapsed_ms'] for s in variants_out[name]['samples']]):.0f} "
+            f"mean_ms={mean_ms:.0f} "
             f"({time.perf_counter() - started:.1f}s)"
         )
 
     default = variants_out.get("default_tesseract") or variants_out[variant_names[0]]
+    assert default is not None
     errors = analyze_errors(default)
 
     robustness: dict[str, object] = {"skipped": True}
@@ -441,7 +517,7 @@ def main() -> int:
         ),
         encoding="utf-8",
     )
-    metrics = {"variants": variants_out}
+    metrics: dict[str, object] = {"variants": variants_out}
     for name, payload in (
         ("metrics.json", metrics),
         ("errors.json", errors),
