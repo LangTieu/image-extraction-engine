@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import cv2
 import numpy as np
 import pytest
 from PIL import Image, ImageDraw, ImageFont
@@ -395,9 +396,8 @@ def test_deskew_straightens_known_rotation():
     from engine.preprocessing import transforms as tx
 
     img = _hmi_like_image()
-    rotated = tx.rotate_bounded(img, tx.OrientationConfig(), angle=5.0)
-    gray = cv2.cvtColor(rotated, cv2.COLOR_RGB2GRAY)
-    skew = tx.deskew_angle(gray)
+    rotated, _ = tx.rotate(img, tx.RotateConfig(angle=-5.0))
+    skew = tx.deskew_angle(rotated)
     assert skew is not None
     assert abs(skew - 5.0) < 1.0, f"detected {skew:.2f} deg, expected ~5"
 
@@ -442,7 +442,8 @@ def test_perspective_falls_back_to_border_lines():
     from engine.industrial.screen import _border_line_quad
     from engine.preprocessing.io import load_input
 
-    quad = _border_line_quad(cv2.cvtColor(load_input("/tmp/tcm-plc.jpg")[0].data, cv2.COLOR_RGB2GRAY))
+    page = load_input("/tmp/tcm-plc.jpg")[0].data
+    quad = _border_line_quad(cv2.cvtColor(page, cv2.COLOR_RGB2GRAY))
     assert quad is not None, "border-line fallback should find the screen quad"
     from engine.industrial.pipeline import IndustrialVision
 

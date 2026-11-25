@@ -54,19 +54,38 @@ def detect_screen_quad(image: np.ndarray) -> np.ndarray | None:
     if best is None:
         return None
     quad = tx.order_corners(best.reshape(-1, 2).astype(float))
-    # Sanity check: the screen interior must differ in brightness from its
-    # surroundings (a lit screen is brighter, a dark HMI screen darker than
-    # the bezel/room around it). A quad hugging a flat area with no contrast
-    # is not a screen boundary — fall back to the full frame.
+    if not _screen_has_contrast(gray, quad):
+        gradient = _border_gradient_quad(gray)
+        if gradient is None:
+            return None
+        top, bottom = gradient["top"][1], gradient["bottom"][1]
+        left, right = gradient["left"][1], gradient["right"][1]
+        quad = tx.order_corners(
+            np.array(
+                [[left, top], [right, top], [right, bottom], [left, bottom]],
+                dtype=np.float64,
+            )
+        )
+        if not _screen_has_contrast(gray, quad):
+            return None
+    return quad
+
+
+def _screen_has_contrast(gray: np.ndarray, quad: np.ndarray) -> bool:
+    """True when the screen interior differs in brightness from its surroundings.
+
+    A lit screen is brighter, a dark HMI screen darker than the bezel/room
+    around it; a quad hugging a flat area with no contrast is not a screen
+    boundary.
+    """
+    import cv2
+
     mask = np.zeros(gray.shape, np.uint8)
-    pts = [np.asarray(quad, dtype=np.int32)]
-    cv2.fillPoly(mask, pts, (255,))
+    cv2.fillPoly(mask, [np.asarray(quad, dtype=np.int32)], (255,))
     inside_mask = mask.astype(bool)
     inside = float(gray[inside_mask].mean()) if inside_mask.any() else 0.0
     outside = float(gray[~inside_mask].mean()) if (~inside_mask).any() else inside
-    if abs(inside - outside) < 15.0:
-        return None
-    return quad
+    return abs(inside - outside) >= 15.0
 
 
 def _border_line_quad(gray: np.ndarray) -> np.ndarray | None:
