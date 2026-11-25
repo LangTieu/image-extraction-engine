@@ -39,6 +39,21 @@ class BBox(BaseModel):
         return v
 
 
+class Provenance(BaseModel):
+    """Source position of one node: page + bbox in original-image coordinates.
+
+    ``page`` is 0-based (matching ``SourceInfo.page`` and
+    ``engine/ocr/pdf.py:PageText.page_index``). ``scale`` records the render
+    factor (DPI / 72) used for PDF pages so multi-scale pages stay traceable.
+    """
+
+    page: int | None = None
+    bbox: BBox
+    coord_space: Literal["original"] = "original"
+    unit: Literal["px"] = "px"
+    scale: float | None = None
+
+
 class SourceInfo(BaseModel):
     file_name: str
     page: int | None = None
@@ -58,6 +73,7 @@ class TextBlock(BaseModel):
     reading_order: int | None = None
     confidence: float | None = Field(default=None, ge=0, le=1)
     language: str | None = None  # BCP-47, e.g. "vi", "en"
+    prov: list[Provenance] = []
 
 
 class ValidationIssue(BaseModel):
@@ -78,6 +94,7 @@ class Cell(BaseModel):
     validation_results: list[ValidationIssue] = []
     warnings: list[str] = []
     proposals: list[str] = []  # ambiguity candidates when needs_review
+    prov: list[Provenance] = []
 
 
 class Table(BaseModel):
@@ -89,6 +106,7 @@ class Table(BaseModel):
     confidence: float | None = Field(default=None, ge=0, le=1)
     needs_review: bool = False
     validation_results: list[ValidationIssue] = []
+    prov: list[Provenance] = []
 
 
 class FieldValue(BaseModel):
@@ -100,6 +118,7 @@ class FieldValue(BaseModel):
     confidence: float | None = Field(default=None, ge=0, le=1)
     bbox: BBox | None = None
     cell_ref: Cell | None = None
+    prov: list[Provenance] = []
     needs_review: bool = False
     validation_results: list[ValidationIssue] = []
     proposals: list[str] = []  # ambiguity candidates when needs_review

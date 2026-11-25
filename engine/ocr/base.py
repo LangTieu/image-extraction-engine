@@ -28,6 +28,12 @@ class OCRToken:
     bbox: tuple[float, float, float, float]  # x0, y0, x1, y1 in px
     confidence: float
     language: str | None = None
+    bbox_original: tuple[float, float, float, float] | None = None
+    """Same box mapped back to the original image (set by the orchestrator)."""
+    page_index: int | None = None
+    """0-based page number (PDF paths; None for single images)."""
+    scale: float | None = None
+    """Render factor (DPI / 72) between PDF page points and raster pixels."""
 
 
 @dataclass

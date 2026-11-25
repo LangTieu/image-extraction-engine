@@ -145,15 +145,25 @@ def test_group_lines_and_reading_order():
 
 
 def _write_text_layer_pdf(path, text="HELLO TEXT LAYER") -> None:
-    content = f"BT /F1 24 Tf 72 700 Td ({text}) Tj ET".encode()
-    objs = [
+    _write_text_layer_pdf_pages(path, [text])
+
+
+def _write_text_layer_pdf_pages(path, texts: list[str]) -> None:
+    n = len(texts)
+    objs: list[bytes] = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-        b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
-        b"<< /Length %d >>\nstream\n%s\nendstream" % (len(content), content),
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Type /Pages /Kids [%s] /Count %d >>"
+        % (b" ".join(b"%d 0 R" % (3 + 2 * i) for i in range(n)), n),
     ]
+    for i, text in enumerate(texts):
+        content = f"BT /F1 24 Tf 72 {700 - 40 * i} Td ({text}) Tj ET".encode()
+        objs.append(
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents %d 0 R "
+            b"/Resources << /Font << /F1 %d 0 R >> >> >>"
+            % (4 + 2 * i, 3 + 2 * n)
+        )
+        objs.append(b"<< /Length %d >>\nstream\n%s\nendstream" % (len(content), content))
+    objs.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
     out = b"%PDF-1.4\n"
     offsets = []
     for i, body in enumerate(objs, start=1):
@@ -182,6 +192,40 @@ def test_pdf_text_layer_fast_path(tmp_path):
     assert page.render is None  # fast path: no rasterization, no OCR
     joined = " ".join(t.text for t in page.tokens)
     assert "HELLO" in joined and "LAYER" in joined
+
+
+def test_pdf_pages_carry_page_index_and_scale_into_prov(tmp_path):
+    from engine.schema import BBox, Provenance
+
+    pdf = str(tmp_path / "two.pdf")
+    _write_text_layer_pdf_pages(pdf, ["FIRST PAGE TEXT", "SECOND PAGE TEXT"])
+
+    # Page 0 rendered at 150 DPI, page 1 at 300 DPI (per-page renders).
+    pages_low = extract_pdf_pages(pdf, dpi=150)
+    pages_high = extract_pdf_pages(pdf, dpi=300)
+    assert [p.page_index for p in pages_low] == [0, 1]
+
+    provs: list[Provenance] = []
+    page_sizes: list[tuple[float, float]] = []
+    for page, dpi in ((pages_low[0], 150), (pages_high[1], 300)):
+        (block,) = tokens_to_blocks(page.tokens)
+        assert block.page_index == page.page_index
+        assert block.scale == pytest.approx(dpi / 72.0)
+        x0, y0, x1, y1 = block.bbox
+        provs.append(
+            Provenance(
+                page=block.page_index,
+                bbox=BBox(x0=x0, y0=y0, x1=x1, y1=y1),
+                scale=block.scale,
+            )
+        )
+        page_sizes.append((612 * dpi / 72.0, 792 * dpi / 72.0))
+
+    for prov, (w, h) in zip(provs, page_sizes, strict=True):
+        assert prov.scale in (150 / 72, 300 / 72)
+        # Boxes land inside the page's rendered pixel size.
+        assert 0 <= prov.bbox.x0 < prov.bbox.x1 <= w
+        assert 0 <= prov.bbox.y0 < prov.bbox.y1 <= h
 
 
 def test_pdf_image_only_page_uses_ocr_path(tmp_path):
@@ -279,6 +323,11 @@ def test_orchestrator_bbox_original_through_homography():
     assert block.bbox_original == (10 + dx, 10 + dy, 40 + dx, 30 + dy)
     # processed coords unchanged
     assert tok.bbox == (10.0, 10.0, 40.0, 30.0)
+    # Space/unit bookkeeping on the recorded step.
+    (entry,) = log.entries
+    assert entry.unit == "px"
+    assert entry.space_from == "processed"
+    assert entry.space_to == "original"
 
 
 def test_orchestrator_requires_engine():

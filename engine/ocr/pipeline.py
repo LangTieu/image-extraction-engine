@@ -105,6 +105,9 @@ class GeneralOCR:
             else:
                 assert page.render is not None
                 result = self._run_chain(page.render)
+                for t in result.tokens:
+                    t.page_index = page.page_index
+                    t.scale = page.dpi / 72.0
                 if result.engine and result.engine not in engines_used:
                     engines_used.append(result.engine)
                 blocks = tokens_to_blocks(result.tokens)
@@ -125,9 +128,9 @@ def _with_original_coords(doc: OCRDocument, log) -> OCRDocument:
     """Attach bbox_original to every token and block via the TransformLog."""
     for page in doc.pages:
         for block in page:
-            block.bbox_original = _map_bbox(block.bbox, log)  # type: ignore[attr-defined]
+            block.bbox_original = _map_bbox(block.bbox, log)
             for token in block.tokens:
-                token.bbox_original = _map_bbox(token.bbox, log)  # type: ignore[attr-defined]
+                token.bbox_original = _map_bbox(token.bbox, log)
     for token in doc.tokens:
-        token.bbox_original = _map_bbox(token.bbox, log)  # type: ignore[attr-defined]
+        token.bbox_original = _map_bbox(token.bbox, log)
     return doc

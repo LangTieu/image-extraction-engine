@@ -20,7 +20,7 @@ import numpy as np
 
 from engine.ocr.base import OCRToken
 from engine.ocr.multiscale import reocr_low_confidence
-from engine.schema import BBox, Table
+from engine.schema import BBox, Provenance, Table
 from engine.schema.models import ExtractionStatus
 from engine.tables.base import (
     TABLE_BACKENDS,
@@ -98,6 +98,19 @@ class TablePipeline:
                 used.append(grid.region.backend)
             table = grid_to_table(grid, tokens, table_name=table_name)
             if transform_log is not None and table.bbox is not None:
+                table.prov = [
+                    Provenance(
+                        bbox=_map_bbox(
+                            (
+                                table.bbox.x0,
+                                table.bbox.y0,
+                                table.bbox.x1,
+                                table.bbox.y1,
+                            ),
+                            transform_log,
+                        )
+                    )
+                ]
                 table.bbox = _map_bbox(
                     (
                         table.bbox.x0,
@@ -109,6 +122,14 @@ class TablePipeline:
                 )
                 for cell in table.cells:
                     if cell.bbox is not None:
+                        cell.prov = [
+                            Provenance(
+                                bbox=_map_bbox(
+                                    (cell.bbox.x0, cell.bbox.y0, cell.bbox.x1, cell.bbox.y1),
+                                    transform_log,
+                                )
+                            )
+                        ]
                         cell.bbox = _map_bbox(
                             (cell.bbox.x0, cell.bbox.y0, cell.bbox.x1, cell.bbox.y1),
                             transform_log,

@@ -8,6 +8,7 @@ from engine.schema import (
     BBox,
     ExtractionResult,
     FieldValue,
+    Provenance,
     SourceInfo,
     TextBlock,
     all_categories,
@@ -103,6 +104,48 @@ class TestJsonSchemaExport:
         assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
         assert schema["title"] == "ExtractionResult"
         assert "tables" in schema["properties"]
+
+
+class TestProvenance:
+    def test_provenance_defaults_and_literals(self):
+        from engine.schema import Cell, Provenance, Table
+
+        prov = Provenance(bbox=BBox(x0=1, y0=2, x1=3, y1=4))
+        assert prov.page is None and prov.scale is None
+        assert prov.coord_space == "original" and prov.unit == "px"
+        with pytest.raises(Exception):
+            Provenance(bbox=BBox(x0=1, y0=2, x1=3, y1=4), unit="mm")
+        with pytest.raises(Exception):
+            Provenance(bbox=BBox(x0=1, y0=2, x1=3, y1=4), coord_space="processed")
+        # Empty by default on every node kind.
+        assert TextBlock(text="t", bbox=None).prov == []
+        assert Cell(row_index=0, col_index=0).prov == []
+        assert Table(table_name="t").prov == []
+        assert FieldValue(name="f", value="v").prov == []
+
+    def test_prov_survives_json_round_trip(self):
+        prov = [
+            Provenance(
+                page=3,
+                bbox=BBox(x0=10, y0=20, x1=110, y1=40),
+                scale=300 / 72,
+            )
+        ]
+        block = TextBlock(text="HOT COIL", bbox=BBox(x0=1, y0=2, x1=3, y1=4), prov=prov)
+        again = TextBlock.model_validate(json.loads(block.model_dump_json()))
+        assert again.prov == prov
+        assert again.prov[0].scale == pytest.approx(300 / 72)
+        assert again.prov[0].page == 3
+
+    def test_prov_on_cell_table_fieldvalue(self):
+        from engine.schema import Cell, Provenance, Table
+
+        prov = [Provenance(page=0, bbox=BBox(x0=0, y0=0, x1=9, y1=9), scale=150 / 72)]
+        cell = Cell(row_index=0, col_index=0, prov=prov)
+        table = Table(table_name="coil", cells=[cell], prov=prov)
+        field = FieldValue(name="coil_no", value="X", prov=prov)
+        assert table.prov == prov and table.cells[0].prov == prov
+        assert field.prov == prov
 
 
 class TestTaxonomyExtensibility:

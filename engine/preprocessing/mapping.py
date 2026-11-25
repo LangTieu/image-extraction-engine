@@ -31,11 +31,20 @@ def apply_homography(points: np.ndarray, homography: np.ndarray) -> np.ndarray:
 
 @dataclass
 class TransformEntry:
-    """One recorded transform step."""
+    """One recorded transform step.
+
+    ``space_from``/``space_to`` say which coordinate spaces the matrix joins:
+    the matrix maps ``space_from`` ("processed") coordinates back to
+    ``space_to`` ("original") coordinates of that step. ``unit`` is the pixel
+    unit both spaces share.
+    """
 
     name: str
     matrix: np.ndarray  # 3x3, maps post-step coords -> pre-step coords
     params: dict[str, float | int | str | bool] = field(default_factory=dict)
+    unit: str = "px"
+    space_from: str = "processed"
+    space_to: str = "original"
 
 
 @dataclass
@@ -45,7 +54,7 @@ class TransformLog:
     entries: list[TransformEntry] = field(default_factory=list)
     _cumulative: np.ndarray = field(default_factory=lambda: IDENTITY.copy())
 
-    def add(self, name: str, matrix: np.ndarray, **params: object) -> None:
+    def add(self, name: str, matrix: np.ndarray, **params: float | int | str | bool) -> None:
         """Record a step whose matrix maps post-step coords to pre-step coords.
 
         The cumulative matrix is H_oldest @ ... @ H_newest (column-vector
@@ -53,9 +62,7 @@ class TransformLog:
         latest processed coordinates back to the original image.
         """
         matrix = np.asarray(matrix, dtype=np.float64)
-        self.entries.append(
-            TransformEntry(name=name, matrix=matrix, params=dict(params))  # type: ignore[arg-type]
-        )
+        self.entries.append(TransformEntry(name=name, matrix=matrix, params=dict(params)))
         self._cumulative = self._cumulative @ matrix
 
     @property

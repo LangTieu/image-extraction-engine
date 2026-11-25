@@ -36,6 +36,7 @@ from engine.schema import (
     ExtractionStatus,
     FieldValue,
     ProcessingMeta,
+    Provenance,
     SourceInfo,
     Table,
     TextBlock,
@@ -153,6 +154,7 @@ class IndustrialVision:
             for block in ocr_document.pages[0] if ocr_document.pages else []:
                 if not re.search(r"[A-Za-z0-9]", block.text):
                     continue  # punctuation/noise-only lines from screen glare
+                prov_bbox = block.bbox_original or block.bbox
                 text_blocks.append(
                     TextBlock(
                         text=block.text,
@@ -163,6 +165,20 @@ class IndustrialVision:
                         else None,
                         reading_order=block.reading_order,
                         confidence=block.confidence,
+                        prov=[
+                            Provenance(
+                                page=block.page_index,
+                                bbox=BBox(
+                                    x0=prov_bbox[0],
+                                    y0=prov_bbox[1],
+                                    x1=prov_bbox[2],
+                                    y1=prov_bbox[3],
+                                ),
+                                scale=block.scale,
+                            )
+                        ]
+                        if prov_bbox
+                        else [],
                     )
                 )
 

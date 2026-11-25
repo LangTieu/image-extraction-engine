@@ -282,6 +282,14 @@ def test_extract_maps_bbox_through_transform_log():
     assert table.bbox.x0 == pytest.approx(min(t.bbox[0] for t in tokens) * 2, abs=1.0)
     assert table.bbox.y1 == pytest.approx(max(t.bbox[3] for t in tokens) * 2, abs=1.0)
     assert all(c.bbox is not None for c in table.cells)
+    # Provenance: original-space box recorded before mapping, per node.
+    assert table.prov and table.prov[0].coord_space == "original"
+    assert table.prov[0].unit == "px"
+    assert table.prov[0].bbox.x0 == pytest.approx(min(t.bbox[0] for t in tokens) * 2, abs=1.0)
+    for cell in table.cells:
+        assert cell.prov, "every cell carries prov"
+        assert cell.prov[0].bbox == cell.bbox
+        assert cell.prov[0].coord_space == "original" and cell.prov[0].unit == "px"
 
 
 def test_extract_warns_when_no_header_row():
@@ -338,6 +346,77 @@ def test_tatr_raises_unavailable_without_cached_weights(monkeypatch):
         backend.detect(np.zeros((100, 100), np.uint8), [])
     # If the probe ran at all, it stayed local-only: it never downloads.
     assert all(call.get("local_files_only") is True for call in calls)
+
+
+class _FakeModel:
+    def __call__(self, **kwargs):
+        return None
+
+
+class _FakeInputs(dict):
+    def to(self, *args, **kwargs):  # processor chain calls .to(device)
+        return self
+
+
+class _FakeProcessor:
+    """Stands in for AutoImageProcessor: fixed detections, no model run."""
+
+    def __init__(self, results):
+        self._results = results
+
+    def __call__(self, images=None, return_tensors="pt"):
+        return _FakeInputs()
+
+    def post_process_object_detection(self, outputs, threshold, target_sizes):
+        return self._results
+
+
+def test_tatr_cell_offset_covers_every_cell_including_last_row():
+    import torch
+
+    backend = TATRBackend(TableConfig())
+    det = _FakeProcessor(
+        [
+            {
+                "scores": torch.tensor([0.99]),
+                "labels": torch.tensor([0]),
+                "boxes": torch.tensor([[10.0, 20.0, 110.0, 120.0]]),
+            }
+        ]
+    )
+    # Two row bands and two column bands in crop space.
+    struct = _FakeProcessor(
+        [
+            {
+                "scores": torch.tensor([0.9] * 4),
+                "labels": torch.tensor([0, 0, 1, 1]),
+                "boxes": torch.tensor(
+                    [
+                        [0.0, 0.0, 80.0, 25.0],  # row 0: y 0..25
+                        [0.0, 25.0, 80.0, 50.0],  # row 1: y 25..50
+                        [0.0, 0.0, 30.0, 50.0],  # col 0: x 0..30
+                        [30.0, 0.0, 60.0, 50.0],  # col 1: x 30..60
+                    ]
+                ),
+            }
+        ]
+    )
+    backend._loaded = True
+    backend._det = _FakeModel()
+    backend._det_processor = det
+    backend._struct = _FakeModel()
+    backend._struct_processor = struct
+    backend._id2label_det = {0: "table"}
+    backend._id2label_struct = {0: "table row", 1: "table column"}
+
+    grids = backend.detect(np.zeros((200, 200, 3), np.uint8), [])
+    assert len(grids) == 1
+    grid = grids[0]
+    assert grid.n_rows == 2 and grid.n_cols == 1
+    assert [(c.row, c.col) for c in grid.cells] == [(0, 0), (1, 0)]  # last row emitted
+    # Crop-space bands offset by the region bbox (10, 20): every cell.
+    assert grid.cells[0].bbox == pytest.approx((10.0, 20.0, 40.0, 45.0))
+    assert grid.cells[1].bbox == pytest.approx((10.0, 45.0, 40.0, 70.0))
 
 
 # ---------------------------------------------------------------------------

@@ -22,6 +22,12 @@ class TextBlock:
     confidence: float
     tokens: list[OCRToken] = field(default_factory=list)
     reading_order: int = 0
+    bbox_original: tuple[float, float, float, float] | None = None
+    """Block box mapped back to the original image (set by the orchestrator)."""
+    page_index: int | None = None
+    """0-based page number carried from the tokens (PDF paths)."""
+    scale: float | None = None
+    """Render factor (DPI / 72) carried from the tokens (PDF paths)."""
 
 
 def split_columns(tokens: list[OCRToken], min_gap_ratio: float = 0.05) -> list[list[OCRToken]]:
@@ -98,6 +104,8 @@ def tokens_to_blocks(tokens: list[OCRToken]) -> list[TextBlock]:
             )
             text = " ".join(t.text for t in line)
             conf = sum(t.confidence for t in line) / len(line)
+            page_indices = {t.page_index for t in line if t.page_index is not None}
+            scales = {t.scale for t in line if t.scale is not None}
             blocks.append(
                 TextBlock(
                     text=text,
@@ -105,6 +113,8 @@ def tokens_to_blocks(tokens: list[OCRToken]) -> list[TextBlock]:
                     confidence=conf,
                     tokens=list(line),
                     reading_order=len(blocks),
+                    page_index=page_indices.pop() if len(page_indices) == 1 else None,
+                    scale=scales.pop() if len(scales) == 1 else None,
                 )
             )
     return blocks
