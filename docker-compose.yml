@@ -11,7 +11,10 @@ services:
       SERVICE_PROFILE: industrial
       SERVICE_MAX_UPLOAD_MB: "20"
       SERVICE_RATE_LIMIT_PER_MINUTE: "60"
-      # IMAGE_ENGINE_API_KEY: change-me
+      # API-key gate (Henrry): set the key in the repo's Actions secrets
+      # (Settings > Secrets and variables > Actions > IMAGE_ENGINE_API_KEY);
+      # the same value goes into the web UI's unlock screen.
+      IMAGE_ENGINE_API_KEY: ${IMAGE_ENGINE_API_KEY:?set IMAGE_ENGINE_API_KEY in the environment (or .env)}
     volumes:
       - iee-data:/app/service/data
   # Optional profile: docker compose --profile redis up

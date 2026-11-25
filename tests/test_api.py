@@ -316,11 +316,16 @@ def test_no_session_leak_under_repeated_polling(
 
 def test_auth_missing_wrong_and_correct_key(api_key_client: TestClient) -> None:
     assert api_key_client.get("/v1/version").status_code == 401
+    assert api_key_client.get("/v1/jobs").status_code == 401
     assert (
         api_key_client.get("/v1/version", headers={"X-API-Key": "wrong"}).status_code == 401
     )
     assert (
         api_key_client.get("/v1/version", headers={"X-API-Key": "test-key-123"}).status_code
+        == 200
+    )
+    assert (
+        api_key_client.get("/v1/jobs", headers={"X-API-Key": "test-key-123"}).status_code
         == 200
     )
 
@@ -406,6 +411,39 @@ def test_ui_routes_exist_on_backend() -> None:
 def _ui_src(*relpath: str) -> str:
     root = Path(__file__).resolve().parents[1] / "service" / "web" / "src"
     return (root.joinpath(*relpath)).read_text()
+
+
+def test_ui_sends_api_key_header() -> None:
+    """API-key gate: when a key is stored, every request must carry X-API-Key.
+
+    Fails on the pre-gate UI: no key storage, no header on either transport
+    (fetch in ``request`` and the XHR upload).
+    """
+    api_src = _ui_src("api.ts")
+    assert "iee_api_key" in api_src, "api.ts must keep the key in localStorage under iee_api_key"
+    assert "getApiKey" in api_src, "api.ts must read the key via getApiKey()"
+    # fetch transport: merged into request()'s headers
+    assert re.search(r"\.\.\.\s*authHeaders\(\)|authHeaders\(\)", api_src) or re.search(
+        r"[\"']X-API-Key[\"']\s*:\s*getApiKey", api_src
+    ), "fetch requests must attach X-API-Key"
+    assert re.search(r"[\"']X-API-Key[\"']", api_src), "X-API-Key header name must be used"
+    # upload transport: the XHR path must set the header too
+    assert re.search(
+        r"setRequestHeader\(\s*[\"']X-API-Key", api_src
+    ), "the upload XHR must send X-API-Key"
+
+
+def test_ui_handles_401_by_relocking() -> None:
+    """API-key gate: a 401 must clear the stored key and surface an event the app
+    can use to show the unlock screen again."""
+    api_src = _ui_src("api.ts")
+    assert re.search(
+        r"status\s*===\s*401", api_src
+    ), "api.ts must special-case a 401 response"
+    assert "clearApiKey" in api_src, "a 401 must clear the stored key"
+    assert "AUTH_ERROR_EVENT" in api_src or "auth-error" in api_src, (
+        "a 401 must notify the app (custom event) so it can show the unlock screen"
+    )
 
 
 def test_ui_renders_text_blocks() -> None:

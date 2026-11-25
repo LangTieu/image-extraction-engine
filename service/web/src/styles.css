@@ -187,6 +187,55 @@ kbd {
   height: 100dvh;
 }
 
+/* API-key gate (unlock screen) */
+.unlock-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.unlock-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(400px, calc(100vw - 32px));
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.unlock-card h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.unlock-card p {
+  margin: 0;
+  color: var(--muted, #666);
+}
+
+.unlock-card .edit-input {
+  width: 100%;
+}
+
+.unlock-error {
+  color: var(--bad, #b3261e);
+}
+
+.unlock-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.sign-out {
+  margin: 0 8px;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;

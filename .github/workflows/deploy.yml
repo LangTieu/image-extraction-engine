@@ -84,7 +84,7 @@ jobs:
       - name: Pull the published image
         run: docker pull ghcr.io/langtieu/image-extraction-engine:${{ github.sha }}
       - name: Deploy with docker compose
-        run: IMAGE_TAG=${{ github.sha }} docker compose up -d --no-build
+        run: IMAGE_TAG=${{ github.sha }} IMAGE_ENGINE_API_KEY=${{ secrets.IMAGE_ENGINE_API_KEY }} docker compose up -d --no-build
 
       - name: Smoke test /v1/health
         run: |

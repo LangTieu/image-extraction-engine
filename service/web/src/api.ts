@@ -192,6 +192,52 @@ function acquireSlot(): Promise<void> {
 }
 
 /* ------------------------------------------------------------------ */
+/* API key gate                                                        */
+/* ------------------------------------------------------------------ */
+
+/** localStorage key for the API key entered on the unlock screen. */
+export const API_KEY_STORAGE = 'iee_api_key'
+/** Fired (on window) when the API answers 401: the stored key was cleared and
+ * the app must show the unlock screen again. */
+export const AUTH_ERROR_EVENT = 'iee-auth-error'
+
+export function getApiKey(): string {
+  try {
+    return localStorage.getItem(API_KEY_STORAGE)?.trim() ?? ''
+  } catch {
+    return '' // private mode with storage disabled
+  }
+}
+
+export function setApiKey(key: string): void {
+  try {
+    localStorage.setItem(API_KEY_STORAGE, key.trim())
+  } catch {
+    /* storage unavailable: the key still works for this session's requests */
+  }
+}
+
+export function clearApiKey(): void {
+  try {
+    localStorage.removeItem(API_KEY_STORAGE)
+  } catch {
+    /* ignore */
+  }
+}
+
+function authHeaders(): Record<string, string> {
+  const key = getApiKey()
+  return key ? { 'X-API-Key': key } : {}
+}
+
+function handleAuthFailure(status: number): void {
+  if (status === 401 && getApiKey() !== '') {
+    clearApiKey()
+    window.dispatchEvent(new Event(AUTH_ERROR_EVENT))
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Transport                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -237,12 +283,13 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   await acquireSlot()
   let res: Response
   try {
-    res = await fetch(BASE + path, init)
+    res = await fetch(BASE + path, { ...init, headers: { ...authHeaders(), ...init.headers } })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error
     throw new ApiError(0, 'Cannot reach the API. Check that the server is running.')
   }
   if (!res.ok) {
+    handleAuthFailure(res.status)
     const raw = await res.text().catch(() => '')
     throw buildError(res.status, res.statusText, parseBody(raw), res.headers.get('Retry-After'))
   }
@@ -827,12 +874,15 @@ export function createJob(
         const xhr = new XMLHttpRequest()
         xhr.open('POST', `${BASE}/jobs${qs ? `?${qs}` : ''}`)
         xhr.setRequestHeader('Accept', 'application/json')
+        const apiKey = getApiKey()
+        if (apiKey) xhr.setRequestHeader('X-API-Key', apiKey)
         xhr.upload.onprogress = (event) => {
           if (event.lengthComputable) onProgress?.(event.loaded, event.total)
         }
         xhr.onload = () => {
           const body = parseBody(xhr.responseText)
           if (xhr.status < 200 || xhr.status >= 300) {
+            handleAuthFailure(xhr.status)
             reject(buildError(xhr.status, xhr.statusText, body, xhr.getResponseHeader('Retry-After')))
             return
           }

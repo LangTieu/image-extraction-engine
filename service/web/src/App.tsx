@@ -1,5 +1,7 @@
-import { getHealth, getVersion, isActiveStatus, listJobs } from './api'
+import { useEffect, useState } from 'react'
+import { AUTH_ERROR_EVENT, clearApiKey, getApiKey, getHealth, getVersion, isActiveStatus, listJobs } from './api'
 import { Icon, Notice, type IconName } from './components/ui'
+import { UnlockScreen } from './components/Unlock'
 import { routeHref, usePolling, useRoute, type Route } from './hooks'
 import { JobsView } from './views/JobsView'
 import { ResultsView } from './views/ResultsView'
@@ -47,6 +49,19 @@ function NavLink({
 export default function App() {
   const route = useRoute()
 
+  // API-key gate: locked on first open (no key stored) and again whenever the
+  // API answers 401 (api.ts clears the bad key and fires AUTH_ERROR_EVENT).
+  const [locked, setLocked] = useState(() => getApiKey() === '')
+  const [hasKey, setHasKey] = useState(() => getApiKey() !== '')
+  useEffect(() => {
+    const relock = () => {
+      setHasKey(false)
+      setLocked(true)
+    }
+    window.addEventListener(AUTH_ERROR_EVENT, relock)
+    return () => window.removeEventListener(AUTH_ERROR_EVENT, relock)
+  }, [])
+
   // While a job is open in the review screen the request budget belongs to review actions.
   const reviewing = route.view === 'review' && route.jobId !== null
   // Keep polling (more slowly) while a review screen is open: the "n in progress" badge in the
@@ -62,6 +77,14 @@ export default function App() {
 
   return (
     <div className="app">
+      {locked && (
+        <UnlockScreen
+          onUnlocked={() => {
+            setHasKey(getApiKey() !== '')
+            setLocked(false)
+          }}
+        />
+      )}
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true" />
@@ -96,6 +119,19 @@ export default function App() {
             {version.data && <span className="muted"> · v{version.data.replace(/^v/i, '')}</span>}
           </span>
         </div>
+        {hasKey && (
+          <button
+            className="btn btn-quiet btn-small sign-out"
+            type="button"
+            onClick={() => {
+              clearApiKey()
+              setHasKey(false)
+              setLocked(true)
+            }}
+          >
+            Sign out / change key
+          </button>
+        )}
       </aside>
 
       <main className="main">
