@@ -67,6 +67,7 @@ class PerspectiveConfig:
 class DenoiseConfig:
     method: str = "fastnlmeans"  # "fastnlmeans" | "bilateral" | "none"
     strength: int = 7
+    require_quality_flag: bool = False  # run only when quality flags a defect
 
 
 @dataclass
@@ -84,6 +85,7 @@ class ContrastConfig:
     clip_limit: float = 2.0
     tile_grid_size: int = 8
     gamma: float | None = None  # None = no gamma step
+    require_quality_flag: bool = False  # run only when quality flags a defect
 
 
 @dataclass
@@ -306,9 +308,14 @@ def detect_quadrilateral(image: np.ndarray, config: PerspectiveConfig) -> np.nda
     height, width = image.shape[:2]
     image_area = height * width
     for edge_map in (
-        cv2.dilate(
+        canny := cv2.dilate(
             cv2.Canny(blurred, config.canny_low, config.canny_high), np.ones((3, 3), np.uint8)
         ),
+        # Glare blows out stretches of the screen border, leaving the Canny
+        # contour broken into arcs that never approximate to a convex quad.
+        # Closing bridges those gaps so the quad survives a photographed
+        # screen; frame-quads are still rejected by _is_frame_quad below.
+        cv2.morphologyEx(canny, cv2.MORPH_CLOSE, np.ones((25, 25), np.uint8)),
         cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1],
     ):
         contours, _ = cv2.findContours(edge_map, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)

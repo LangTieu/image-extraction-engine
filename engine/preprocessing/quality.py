@@ -26,7 +26,8 @@ class QualityWarning(StrEnum):
 class QualityReport:
     width: int
     height: int
-    blur_variance: float  # Laplacian variance; < 100 flags blurry
+    blur_variance: float  # raw Laplacian variance (resolution-dependent)
+    blur_variance_normalized: float  # Laplacian variance at 1000px height; < 100 flags blurry
     brightness: float  # mean gray, 0-255; outside [60, 220] flags
     contrast: float  # std of gray; < 35 flags
     glare_ratio: float  # fraction of saturated pixels; > 0.05 flags
@@ -52,10 +53,23 @@ class QualityReport:
 def compute_quality(image: np.ndarray, glare_ratio: float = 0.0) -> QualityReport:
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     height, width = gray.shape[:2]
+    # Blur must be measured at a reference height: raw Laplacian variance
+    # scales with resolution, so a genuinely blurry 3000px photo scores far
+    # above the threshold while the same photo downscaled flags correctly.
+    scale = 1000.0 / max(height, 1)
+    if abs(scale - 1.0) < 1e-3:
+        normalized = gray
+    else:
+        normalized = cv2.resize(
+            gray,
+            (max(1, round(width * scale)), 1000),
+            interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC,
+        )
     report = QualityReport(
         width=int(width),
         height=int(height),
         blur_variance=float(cv2.Laplacian(gray, cv2.CV_64F).var()),
+        blur_variance_normalized=float(cv2.Laplacian(normalized, cv2.CV_64F).var()),
         brightness=float(gray.mean()),
         contrast=float(gray.std()),
         glare_ratio=float(glare_ratio),
@@ -64,7 +78,7 @@ def compute_quality(image: np.ndarray, glare_ratio: float = 0.0) -> QualityRepor
     )
     if min(report.width, report.height) < 640:
         report.warnings.append(QualityWarning.LOW_RESOLUTION)
-    if report.blur_variance < 100.0:
+    if report.blur_variance_normalized < 100.0:
         report.warnings.append(QualityWarning.BLURRY)
     if report.brightness < 60.0:
         report.warnings.append(QualityWarning.TOO_DARK)

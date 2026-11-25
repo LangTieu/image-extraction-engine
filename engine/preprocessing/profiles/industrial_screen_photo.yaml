@@ -11,10 +11,12 @@ steps:
   denoise:
     method: fastnlmeans
     strength: 7
+    require_quality_flag: true
   contrast:
     clip_limit: 2.5
     tile_grid_size: 8
     gamma: 1.1
+    require_quality_flag: true
   sharpen:
     strength: 0.8
     radius: 3
