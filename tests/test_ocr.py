@@ -385,3 +385,69 @@ def test_coil_table_drops_noise_columns_and_toolbar_rows():
     ), "third data row 003 clipped from the grid"
     # each warning text appears once
     assert len(result.warnings) == len(set(result.warnings)), "duplicate warnings"
+
+
+# --- image correction on real screen photos (deskew / perspective / deblur)
+
+
+def test_deskew_straightens_known_rotation():
+    """Brief: 5-degree skewed image — deskew straightens within tolerance."""
+    from engine.preprocessing import transforms as tx
+
+    img = _hmi_like_image()
+    rotated = tx.rotate_bounded(img, tx.OrientationConfig(), angle=5.0)
+    gray = cv2.cvtColor(rotated, cv2.COLOR_RGB2GRAY)
+    skew = tx.deskew_angle(gray)
+    assert skew is not None
+    assert abs(skew - 5.0) < 1.0, f"detected {skew:.2f} deg, expected ~5"
+
+
+def test_sharpen_runs_on_quality_flagged_blur_only():
+    """Brief: synthetic blurred image — sharpen runs when the quality flag
+    fires and stays a no-op on clean input."""
+    from engine.preprocessing.pipeline import PreprocessingPipeline
+
+    pipe = PreprocessingPipeline.from_dict(
+        "sharp", {"sharpen": {"strength": 0.8, "radius": 3}}
+    )
+    clean = _hmi_like_image()
+    blurry = cv2.GaussianBlur(clean, (0, 0), 5.0)
+
+    out_clean = pipe.run(clean)
+    out_blur = pipe.run(blurry)
+    assert "skipped" in out_clean.step_info["sharpen"], (
+        "sharpen must not run on clean input"
+    )
+    assert "skipped" not in out_blur.step_info["sharpen"], (
+        "sharpen must run on a blurry photo"
+    )
+
+
+def test_blur_flag_uses_resolution_normalized_variance():
+    """A genuinely blurry high-res photo must flag BLURRY (the raw Laplacian
+    variance scales with resolution and masked it before)."""
+    from engine.preprocessing.quality import QualityWarning, compute_quality
+
+    big = np.asarray(Image.fromarray(_hmi_like_image()).resize((3000, 1875)))
+    blurry = cv2.GaussianBlur(big, (0, 0), 5.0)
+    report = compute_quality(blurry)
+    assert QualityWarning.BLURRY in report.warnings
+    assert report.blur_variance_normalized < 100.0
+
+
+def test_perspective_falls_back_to_border_lines():
+    """Glare-broken screen outline: the quad detector must still find the
+    screen via the border-line / gradient fallback, and the enhancement
+    pipeline must run to completion."""
+    from engine.industrial.screen import _border_line_quad
+    from engine.preprocessing.io import load_input
+
+    quad = _border_line_quad(cv2.cvtColor(load_input("/tmp/tcm-plc.jpg")[0].data, cv2.COLOR_RGB2GRAY))
+    assert quad is not None, "border-line fallback should find the screen quad"
+    from engine.industrial.pipeline import IndustrialVision
+
+    vision = IndustrialVision(ocr=GeneralOCR([TesseractEngine()]))
+    result = vision.process(load_input("/tmp/tcm-plc.jpg")[0].data, file_name="tcm.jpg")
+    corrections = result.extensions["industrial"]["corrections"]
+    assert corrections["profile"] == "industrial_screen_photo"
+    assert "screen boundary not detected" not in " ".join(result.warnings)

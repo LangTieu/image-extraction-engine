@@ -53,6 +53,19 @@ def _blur_defect(quality: QualityReport) -> bool:
     )
 
 
+def _tone_defect(quality: QualityReport) -> bool:
+    """True when quality flags noise/contrast a denoise+contrast pass helps.
+
+    Dark or low-contrast photos (screen shots of HMIs) carry sensor/JPEG
+    noise and crushed contrast; the enhancement steps are wasted on clean
+    images, which the gate keeps untouched.
+    """
+    return bool(
+        {QualityWarning.BLURRY, QualityWarning.LOW_CONTRAST, QualityWarning.TOO_DARK}
+        & set(quality.warnings)
+    )
+
+
 @dataclass
 class PreprocessedImage:
     image: np.ndarray  # RGB uint8
@@ -142,13 +155,21 @@ class PreprocessingPipeline:
 
         params = self.steps.get("denoise")
         if params:
-            working = tx.denoise(working, tx.DenoiseConfig(**params))
-            info["denoise"] = dict(params)
+            dn_cfg = tx.DenoiseConfig(**params)
+            if dn_cfg.require_quality_flag and not _tone_defect(quality_before):
+                info["denoise"] = {"skipped": "quality gate: no noise/tone defect flagged"}
+            else:
+                working = tx.denoise(working, dn_cfg)
+                info["denoise"] = dict(params)
 
         params = self.steps.get("contrast")
         if params:
-            working = tx.enhance_contrast(working, tx.ContrastConfig(**params))
-            info["contrast"] = dict(params)
+            ct_cfg = tx.ContrastConfig(**params)
+            if ct_cfg.require_quality_flag and not _tone_defect(quality_before):
+                info["contrast"] = {"skipped": "quality gate: no tone/contrast defect flagged"}
+            else:
+                working = tx.enhance_contrast(working, ct_cfg)
+                info["contrast"] = dict(params)
 
         params = self.steps.get("sharpen")
         if params:

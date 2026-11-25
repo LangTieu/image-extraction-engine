@@ -83,6 +83,30 @@ class IndustrialVision:
 
         return bundled_profiles()
 
+    def _enhance(self, image: np.ndarray):
+        """Run the bundled enhancement profile (constructed lazily)."""
+        if self._preprocessing is None:
+            self._preprocessing = PreprocessingPipeline.for_profile("industrial_screen_photo")
+        return self._preprocessing.run(image)
+
+    @staticmethod
+    def _corrections_dict(pre) -> dict:
+        """Summarize which corrections the enhancement profile applied."""
+        info = pre.step_info
+        return {
+            "profile": pre.profile_name,
+            "orientation_90": info.get("orientation", {}).get("orientation_90", 0),
+            "deskew_deg": info.get("orientation", {}).get("skew_deg", 0.0),
+            "perspective_corrected": bool(
+                info.get("perspective", {}).get("corrected", False)
+            ),
+            "denoise": "skipped" not in info.get("denoise", {"ran": 1}),
+            "contrast": "skipped" not in info.get("contrast", {"ran": 1}),
+            "sharpen": "skipped" not in info.get("sharpen", {"ran": 1}),
+            "upscale_factor": info.get("upscale", {}).get("factor", 1.0),
+            "blur_variance_normalized_before": pre.quality_before.blur_variance_normalized,
+        }
+
     def process(
         self,
         image: np.ndarray,
@@ -95,6 +119,13 @@ class IndustrialVision:
         report = normalize_screen(image, force_rectify=force_rectify)
         warnings.extend(report.warnings)
         working = report.rectified
+
+        # Enhancement profile (contrast / denoise / sharpen / deskew) on the
+        # rectified screen. Runs after rectification so the gates see final
+        # geometry; the pipeline's own quality gates keep it a no-op on clean
+        # input. The detected corrections are surfaced in the result.
+        pre = self._enhance(working)
+        working = pre.image
 
         # One whole-frame OCR pass, shared by profile matching and (on the
         # generic-HMI fallback) text_blocks. Running recognize_image twice
@@ -170,6 +201,7 @@ class IndustrialVision:
                         "glare_ratio": round(report.glare_ratio, 4),
                         "perspective_corrected": report.transform is not None,
                     },
+                    "corrections": self._corrections_dict(pre),
                     "alarms": [self._alarm_dict(a) for a in alarm_entries],
                 }
             },
