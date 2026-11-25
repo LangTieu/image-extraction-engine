@@ -195,37 +195,59 @@ def test_pdf_text_layer_fast_path(tmp_path):
 
 
 def test_pdf_pages_carry_page_index_and_scale_into_prov(tmp_path):
-    from engine.schema import BBox, Provenance
-
+    """End-to-end: the real producer (recognize_pdf) fills page/scale/prov."""
     pdf = str(tmp_path / "two.pdf")
     _write_text_layer_pdf_pages(pdf, ["FIRST PAGE TEXT", "SECOND PAGE TEXT"])
 
-    # Page 0 rendered at 150 DPI, page 1 at 300 DPI (per-page renders).
-    pages_low = extract_pdf_pages(pdf, dpi=150)
-    pages_high = extract_pdf_pages(pdf, dpi=300)
-    assert [p.page_index for p in pages_low] == [0, 1]
+    doc = GeneralOCR([StubEngine([("A", (100, 50, 200, 70), 0.9)])], dpi=150)
+    result = doc.recognize_pdf(pdf)
+    assert [p.page_index for p in extract_pdf_pages(pdf, dpi=150)] == [0, 1]
+    assert len(result.pages) == 2
+    for page_blocks in result.pages:
+        assert page_blocks, "each page has blocks from the real producer"
+        for block in page_blocks:
+            assert block.prov, "prov filled by recognize_pdf, not the test"
+            prov = block.prov[0]
+            assert prov.page == block.page_index
+            assert prov.page in (0, 1)
+            assert prov.scale == pytest.approx(150 / 72.0)
+            # Boxes land inside the page's rendered pixel size.
+            w, h = 612 * 150 / 72.0, 792 * 150 / 72.0
+            assert 0 <= prov.bbox.x0 < prov.bbox.x1 <= w
+            assert 0 <= prov.bbox.y0 < prov.bbox.y1 <= h
 
-    provs: list[Provenance] = []
-    page_sizes: list[tuple[float, float]] = []
-    for page, dpi in ((pages_low[0], 150), (pages_high[1], 300)):
-        (block,) = tokens_to_blocks(page.tokens)
-        assert block.page_index == page.page_index
-        assert block.scale == pytest.approx(dpi / 72.0)
-        x0, y0, x1, y1 = block.bbox
-        provs.append(
-            Provenance(
-                page=block.page_index,
-                bbox=BBox(x0=x0, y0=y0, x1=x1, y1=y1),
-                scale=block.scale,
-            )
-        )
-        page_sizes.append((612 * dpi / 72.0, 792 * dpi / 72.0))
 
-    for prov, (w, h) in zip(provs, page_sizes, strict=True):
-        assert prov.scale in (150 / 72, 300 / 72)
-        # Boxes land inside the page's rendered pixel size.
-        assert 0 <= prov.bbox.x0 < prov.bbox.x1 <= w
-        assert 0 <= prov.bbox.y0 < prov.bbox.y1 <= h
+def test_bbox_original_after_known_deskew():
+    """F1: after a known -5 degree deskew, bbox_original differs and matches
+    the real source coordinates (corners mapped by the rotation matrix)."""
+    from engine.preprocessing import transforms as tx
+
+    img = _text_image()
+    rotated, inv_matrix = tx.rotate(img, tx.RotateConfig(angle=-5.0))
+    box = (60.0, 40.0, 120.0, 60.0)
+    doc = GeneralOCR([StubEngine([("A", box, 0.9)])])
+    log = TransformLog()
+    log.add("deskew", inv_matrix)
+    result = doc.recognize_image(rotated, transform_log=log)
+    block = result.pages[0][0]
+    assert block.bbox_original is not None and tuple(block.bbox_original) != tuple(
+        block.bbox
+    )
+    # Expected: the processed box corners mapped by the known deskew matrix.
+    corners = np.array([[box[0], box[1], 1.0], [box[2], box[3], 1.0]])
+    mapped = corners @ inv_matrix.T
+    expected = (
+        float(min(mapped[0, 0], mapped[1, 0])),
+        float(min(mapped[0, 1], mapped[1, 1])),
+        float(max(mapped[0, 0], mapped[1, 0])),
+        float(max(mapped[0, 1], mapped[1, 1])),
+    )
+    orig = block.bbox_original
+    assert (orig[0], orig[1], orig[2], orig[3]) == pytest.approx(expected, abs=0.5)
+    # Prov carries the same original-space box, filled by the producer.
+    assert block.prov
+    pb = block.prov[0].bbox
+    assert (pb.x0, pb.y0, pb.x1, pb.y1) == pytest.approx(expected, abs=0.5)
 
 
 def test_pdf_image_only_page_uses_ocr_path(tmp_path):
@@ -362,6 +384,26 @@ def test_industrial_vision_generic_hmi_returns_text_blocks():
     assert result.text_blocks, "expected non-empty text_blocks for a text-bearing HMI image"
     joined = " ".join(b.text for b in result.text_blocks)
     assert "MOTOR" in joined and "1200" in joined
+
+
+def test_industrial_vision_text_blocks_carry_provenance():
+    """F4(c): end-to-end via IndustrialVision.process — every text block
+    carries provenance pointing at the original image coordinates."""
+    from engine.industrial.pipeline import IndustrialVision
+    from engine.preprocessing.pipeline import PreprocessingPipeline
+
+    vision = IndustrialVision(
+        preprocessing=PreprocessingPipeline.from_dict("industrial", {}),
+        ocr=GeneralOCR([TesseractEngine()]),
+    )
+    result = vision.process(_hmi_like_image(), file_name="hmi.png")
+    assert result.text_blocks, "expected text blocks to assert provenance on"
+    for block in result.text_blocks:
+        assert block.prov, f"text block {block.text!r} has empty prov"
+        for p in block.prov:
+            assert p.coord_space == "original"
+            assert p.page == 0
+            assert p.unit == "px"
 
 
 # --- coil-table fix: gutter noise columns, toolbar header, duplicate warnings

@@ -24,6 +24,7 @@ from engine.ocr.base import OCREngine, OCRResult, OCRToken
 from engine.ocr.multiscale import reocr_low_confidence
 from engine.ocr.pdf import PageText, extract_pdf_pages
 from engine.ocr.reading_order import TextBlock, blocks_to_text, tokens_to_blocks
+from engine.schema.models import BBox, Provenance
 
 
 def _map_bbox(bbox, log) -> tuple[float, float, float, float]:
@@ -68,6 +69,10 @@ class GeneralOCR:
     def recognize_image(self, image: np.ndarray, *, transform_log=None) -> OCRDocument:
         t0 = time.perf_counter()
         result = self._run_chain(image)
+        for t in result.tokens:
+            # Single raster input: one page, rendered 1:1 (no PDF DPI scaling).
+            t.page_index = 0
+            t.scale = 1.0
         blocks = tokens_to_blocks(result.tokens)
         doc = OCRDocument(
             pages=[blocks],
@@ -77,6 +82,8 @@ class GeneralOCR:
         )
         if transform_log is not None:
             doc = _with_original_coords(doc, transform_log)
+        for page in doc.pages:
+            _attach_prov(page)
         return doc
 
     def _run_chain(self, image: np.ndarray) -> OCRResult:
@@ -121,6 +128,8 @@ class GeneralOCR:
         )
         if transform_log is not None:
             doc = _with_original_coords(doc, transform_log)
+        for blocks_page in doc.pages:
+            _attach_prov(blocks_page)
         return doc
 
 
@@ -134,3 +143,22 @@ def _with_original_coords(doc: OCRDocument, log) -> OCRDocument:
     for token in doc.tokens:
         token.bbox_original = _map_bbox(token.bbox, log)
     return doc
+
+
+def _attach_prov(blocks: list[TextBlock]) -> None:
+    """Fill each block's provenance from real source position (producer side).
+
+    ``bbox_original`` wins (source coordinates) and falls back to the
+    processed bbox when no TransformLog was supplied (identical geometry).
+    """
+    for block in blocks:
+        if block.prov:
+            continue
+        src = block.bbox_original or block.bbox
+        block.prov = [
+            Provenance(
+                page=block.page_index,
+                bbox=BBox(x0=src[0], y0=src[1], x1=src[2], y1=src[3]),
+                scale=block.scale,
+            )
+        ]

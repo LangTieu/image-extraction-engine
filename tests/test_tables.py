@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 from engine.ocr.base import OCRToken
 from engine.preprocessing.mapping import TransformLog
 from engine.schema import Table
+from engine.schema.models import BBox
 from engine.tables.base import (
     CellBox,
     CellGrid,
@@ -286,9 +287,16 @@ def test_extract_maps_bbox_through_transform_log():
     assert table.prov and table.prov[0].coord_space == "original"
     assert table.prov[0].unit == "px"
     assert table.prov[0].bbox.x0 == pytest.approx(min(t.bbox[0] for t in tokens) * 2, abs=1.0)
-    for cell in table.cells:
+    for cell, token in zip(table.cells, tokens, strict=True):
         assert cell.prov, "every cell carries prov"
-        assert cell.prov[0].bbox == cell.bbox
+        # Meaningful check: prov bbox is the cell's box mapped back to
+        # original coordinates (2x resize here), not just a copy of bbox.
+        assert cell.prov[0].bbox == BBox(
+            x0=token.bbox[0] * 2,
+            y0=token.bbox[1] * 2,
+            x1=token.bbox[2] * 2,
+            y1=token.bbox[3] * 2,
+        )
         assert cell.prov[0].coord_space == "original" and cell.prov[0].unit == "px"
 
 
@@ -412,11 +420,15 @@ def test_tatr_cell_offset_covers_every_cell_including_last_row():
     grids = backend.detect(np.zeros((200, 200, 3), np.uint8), [])
     assert len(grids) == 1
     grid = grids[0]
-    assert grid.n_rows == 2 and grid.n_cols == 1
-    assert [(c.row, c.col) for c in grid.cells] == [(0, 0), (1, 0)]  # last row emitted
+    # Two row bands and two column bands: every cell emitted, including the
+    # last row and last column.
+    assert grid.n_rows == 2 and grid.n_cols == 2
+    assert [(c.row, c.col) for c in grid.cells] == [(0, 0), (0, 1), (1, 0), (1, 1)]
     # Crop-space bands offset by the region bbox (10, 20): every cell.
     assert grid.cells[0].bbox == pytest.approx((10.0, 20.0, 40.0, 45.0))
-    assert grid.cells[1].bbox == pytest.approx((10.0, 45.0, 40.0, 70.0))
+    assert grid.cells[1].bbox == pytest.approx((40.0, 20.0, 70.0, 45.0))
+    assert grid.cells[2].bbox == pytest.approx((10.0, 45.0, 40.0, 70.0))
+    assert grid.cells[3].bbox == pytest.approx((40.0, 45.0, 70.0, 70.0))
 
 
 # ---------------------------------------------------------------------------

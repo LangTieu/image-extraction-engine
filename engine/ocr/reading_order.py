@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from engine.ocr.base import OCRToken
+from engine.schema.models import Provenance
 
 
 @dataclass
@@ -28,6 +29,8 @@ class TextBlock:
     """0-based page number carried from the tokens (PDF paths)."""
     scale: float | None = None
     """Render factor (DPI / 72) carried from the tokens (PDF paths)."""
+    prov: list[Provenance] = field(default_factory=list)
+    """Source provenance filled by the producer (GeneralOCR), like the schema."""
 
 
 def split_columns(tokens: list[OCRToken], min_gap_ratio: float = 0.05) -> list[list[OCRToken]]:
