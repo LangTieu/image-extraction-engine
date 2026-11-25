@@ -19,7 +19,9 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from service.core.db import JobFileModel, JobModel, get_session
+from sqlalchemy.orm import Session
+
+from service.core.db import JobFileModel, JobModel, get_session, session_scope
 from service.core.settings import settings
 from service.core.status import derive_job_status
 
@@ -42,7 +44,11 @@ _WORKER_TOKENS: dict[str, str] = {}  # job_id -> current valid token
 
 def process_job(job_id: str) -> None:
     """Run one job: extract every file, then export per-file artifacts."""
-    session = get_session()
+    with session_scope() as session:
+        _run_job(job_id, session)
+
+
+def _run_job(job_id: str, session: Session) -> None:
     job = session.get(JobModel, job_id)
     if job is None:
         logger.error("job %s not found", job_id)
@@ -154,20 +160,26 @@ def _process_file_with_timeout(jf: JobFileModel, job: JobModel, token: str) -> N
 def cancel_job(job_id: str) -> None:
     """Best-effort cancellation for the in-process worker mode."""
     CANCELLED.add(job_id)
-    session = get_session()
-    job = session.get(JobModel, job_id)
-    if job is not None and job.status in ("queued", "processing"):
-        job.status = "failed"
-        job.error = "cancelled"
-        job.progress = 100
-        session.commit()
+    with session_scope() as session:
+        job = session.get(JobModel, job_id)
+        if job is not None and job.status in ("queued", "processing"):
+            job.status = "failed"
+            job.error = "cancelled"
+            job.progress = 100
+            session.commit()
 
 
 def build_exports(job_id: str, formats: list[str]) -> list[str]:
     """(Re)build export artifacts for every finished file of a job."""
+    with session_scope() as session:
+        return _build_exports(job_id, formats, session)
+
+
+def _build_exports(
+    job_id: str, formats: list[str], session: Session
+) -> list[str]:
     from engine.export import ExportOptions, export_batch
 
-    session = get_session()
     job = session.get(JobModel, job_id)
     job_options: dict[str, Any] = (job.options if job is not None else None) or {}
     done: list[str] = []
@@ -276,6 +288,8 @@ def _process_file(jf: JobFileModel, job: JobModel, token: str | None = None) -> 
         jf.status = "failed"
         jf.error = f"{type(exc).__name__}: {exc}"[:1900]
         session.commit()
+    finally:
+        session.close()
 
 
 def enqueue_job(job_id: str) -> None:
