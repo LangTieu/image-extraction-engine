@@ -2,7 +2,7 @@
 FROM node:22-slim AS webbuild
 WORKDIR /web
 COPY service/web/package.json service/web/package-lock.json* ./
-RUN npm install
+RUN npm ci --no-audit --no-fund 2>/dev/null || npm install --no-audit --no-fund
 COPY service/web/ ./
 RUN npm run build
 
@@ -36,6 +36,12 @@ RUN pip install --no-deps . \
 # paddleocr/paddlex (engine/ocr/paddle_backend.py), docling (engine/ocr/pdf.py),
 # torch/transformers/timm (engine/tables/tatr.py). Install them at runtime only if
 # those backends are needed.
+
+# Non-root runtime user; /app/service/data is the writable volume (DB + artifacts).
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /app/service/data \
+    && chown -R appuser:appuser /app/service/data /app/service/web
+USER appuser
 
 ENV SERVICE_DB_URL=sqlite:///./service/data/service.db
 VOLUME ["/app/service/data"]

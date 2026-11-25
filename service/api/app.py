@@ -26,6 +26,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from service.api.schemas import JobCreated, JobOut, JobStatus
 from service.core.db import JobFileModel, JobModel, get_session, new_id
 from service.core.settings import settings
+from service.core.status import derive_job_status
 from service.worker.runner import cancel_job, enqueue_job
 
 app = FastAPI(title=settings.app_name, version="7.0.0")
@@ -59,12 +60,17 @@ async def auth_and_rate_limit(request: Request, call_next):
                 if len(bucket) >= limit:
                     raise HTTPException(429, "rate limit exceeded")
                 bucket.append(now)
+                # Bound memory: drop clients idle for a full window.
+                if len(_RATE) > _RATE_MAX_CLIENTS:
+                    for k in [k for k, v in _RATE.items() if not v or v[-1] < now - 120][: 256]:
+                        _RATE.pop(k, None)
         return await call_next(request)
     except HTTPException as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
 _RATE: dict[str, deque] = defaultdict(deque)
+_RATE_MAX_CLIENTS = 10_000  # hard cap on tracked clients (memory bound)
 
 
 # ---------------------------------------------------------------- helpers
@@ -129,11 +135,7 @@ def _refresh_job_status(job_id: str) -> None:
         f.status
         for f in session.query(JobFileModel).filter(JobFileModel.job_id == job_id).all()
     }
-    job.status = (
-        "completed"
-        if statuses <= {"completed"}
-        else ("failed" if statuses == {"failed"} else "needs_review")
-    )
+    job.status = derive_job_status(statuses)
     session.commit()
 
 
@@ -151,9 +153,25 @@ def create_job(
     """Upload one or more images/PDFs and queue an extraction job."""
     if not files:
         raise HTTPException(422, "at least one file is required")
+    if len(files) > settings.max_files_per_job:
+        raise HTTPException(
+            413, f"too many files: {len(files)} > {settings.max_files_per_job} per job"
+        )
     allowed_types = {t.strip() for t in settings.allowed_upload_types.split(",")}
     max_bytes = settings.max_upload_mb * 1024 * 1024
     settings.ensure_dirs()
+
+    # Validate every upload BEFORE touching disk so a bad file cannot leave
+    # orphaned files behind (review finding #10).
+    payloads: list[tuple[str, str, bytes]] = []
+    for up in files:
+        if up.content_type not in allowed_types:
+            raise HTTPException(415, f"{up.filename}: unsupported type {up.content_type!r}")
+        data = up.file.read()
+        if len(data) > max_bytes:
+            raise HTTPException(413, f"{up.filename}: exceeds {settings.max_upload_mb} MB limit")
+        mime = up.content_type or "application/octet-stream"
+        payloads.append((up.filename or "upload", mime, data))
 
     session = get_session()
     options: dict = {
@@ -166,28 +184,33 @@ def create_job(
     )
     session.add(job)
     session.flush()
-    count = 0
-    for up in files:
-        if up.content_type not in allowed_types:
-            raise HTTPException(415, f"{up.filename}: unsupported type {up.content_type!r}")
-        data = up.file.read()
-        if len(data) > max_bytes:
-            raise HTTPException(413, f"{up.filename}: exceeds {settings.max_upload_mb} MB limit")
-        jf = JobFileModel(
-            id=new_id("file"),
-            job_id=job.id,
-            file_name=up.filename or "upload",
-            stored_path="",
-            mime_type=up.content_type,
-            size_bytes=len(data),
-        )
-        suffix = Path(up.filename or "upload.bin").suffix.lower() or ".bin"
-        stored = settings.uploads_dir / f"{jf.id}{suffix}"
-        stored.write_bytes(data)
-        jf.stored_path = str(stored)
-        session.add(jf)
-        count += 1
-    session.commit()
+    try:
+        count = 0
+        written: list[Path] = []
+        for file_name, mime_type, data in payloads:
+            jf = JobFileModel(
+                id=new_id("file"),
+                job_id=job.id,
+                file_name=file_name,
+                stored_path="",
+                mime_type=mime_type,
+                size_bytes=len(data),
+            )
+            suffix = Path(file_name).suffix.lower() or ".bin"
+            stored = settings.uploads_dir / f"{jf.id}{suffix}"
+            stored.write_bytes(data)
+            written.append(stored)
+            jf.stored_path = str(stored)
+            session.add(jf)
+            count += 1
+        session.commit()
+    except Exception:
+        # Roll back the DB rows and remove files already written to disk so
+        # no orphaned uploads survive a failed create (review finding #10).
+        session.rollback()
+        for p in written:
+            p.unlink(missing_ok=True)
+        raise
     enqueue_job(job.id)
     return JobCreated(
         job_id=job.id, status=cast(JobStatus, job.status), files=count
@@ -195,9 +218,19 @@ def create_job(
 
 
 @router.get("/jobs", response_model=list[JobOut])
-def list_jobs():
+def list_jobs(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """Most recent jobs, newest first (paginated: review finding #14)."""
     session = get_session()
-    jobs = session.query(JobModel).order_by(JobModel.created_at.desc()).limit(100).all()
+    jobs = (
+        session.query(JobModel)
+        .order_by(JobModel.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return [_job_out(j) for j in jobs]
 
 
@@ -314,7 +347,7 @@ def review_field(job_id: str, field_id: str, body: dict):
     return {"job_id": job_id, "field_id": field_id, "action": action, "status": jf.status}
 
 
-@router.post("/jobs/{job_id}/exports", status_code=202)
+@router.post("/jobs/{job_id}/exports")
 def create_exports(job_id: str, body: dict | None = None):
     """(Re)build exports for all files of the job in the requested formats."""
     formats = (body or {}).get("formats") or ["xlsx", "json"]

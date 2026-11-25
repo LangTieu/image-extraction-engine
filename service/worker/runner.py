@@ -14,11 +14,14 @@ message and the job continues; only a job-level crash marks the job ``failed``.
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from service.core.db import JobFileModel, JobModel, get_session
 from service.core.settings import settings
+from service.core.status import derive_job_status
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +31,13 @@ DEFAULT_EXPORT_FORMATS = ("xlsx", "json", "csv")
 # Cancel flags for in-process jobs; retry/timeout knobs.
 CANCELLED: set[str] = set()
 FILE_TIMEOUT_S = 300  # per-file extraction budget
+JOB_TIMEOUT_S = 1800  # whole-job budget; overruns are marked failed
 MAX_RETRIES = 2  # retry a failing file before marking it failed
+
+# Per in-process worker run: a token the zombie thread's writes must still own
+# to be allowed to commit. When a file times out, the token is revoked so the
+# abandoned daemon thread cannot later mark the file completed / dump results.
+_WORKER_TOKENS: dict[str, str] = {}  # job_id -> current valid token
 
 
 def process_job(job_id: str) -> None:
@@ -44,6 +53,9 @@ def process_job(job_id: str) -> None:
 
     files = session.query(JobFileModel).filter(JobFileModel.job_id == job_id).all()
     total = len(files) or 1
+    deadline = time.monotonic() + JOB_TIMEOUT_S
+    token = uuid4().hex
+    _WORKER_TOKENS[job_id] = token
     try:
         for i, jf in enumerate(files):
             if job_id in CANCELLED:
@@ -55,7 +67,14 @@ def process_job(job_id: str) -> None:
             attempts = 0
             while True:
                 try:
-                    _process_file_with_timeout(jf, job)
+                    _process_file_with_timeout(jf, job, token)
+                    break
+                except WorkerSuperseded:
+                    # A timeout revoked this run's token: stop retrying and let
+                    # the sweep below record the timeout, not a phantom success.
+                    jf.status = "failed"
+                    jf.error = f"extraction exceeded {FILE_TIMEOUT_S}s"[:1900]
+                    session.commit()
                     break
                 except Exception as exc:
                     attempts += 1
@@ -67,13 +86,16 @@ def process_job(job_id: str) -> None:
                         break
             job.progress = 5 + int(90 * (i + 1) / total)
             session.commit()
+            if time.monotonic() > deadline:
+                logger.error("job %s exceeded %ss; marking failed", job_id, JOB_TIMEOUT_S)
+                _revoke_token(job_id)
+                job.status = "failed"
+                job.error = f"job exceeded {JOB_TIMEOUT_S}s processing budget"
+                job.progress = 100
+                session.commit()
+                return
         statuses = {jf.status for jf in files}
-        if statuses <= {"completed"}:
-            job.status = "completed"
-        elif "failed" not in statuses:
-            job.status = "needs_review"
-        else:
-            job.status = "needs_review" if statuses & {"completed", "needs_review"} else "failed"
+        job.status = derive_job_status(statuses)  # same derivation as the API
         job.progress = 100
         session.commit()
     except Exception as exc:  # job-level crash
@@ -82,17 +104,40 @@ def process_job(job_id: str) -> None:
         job.error = f"{type(exc).__name__}: {exc}"
         job.progress = 100
         session.commit()
+    finally:
+        _revoke_token(job_id)
+        CANCELLED.discard(job_id)  # prune the cancel flag once the run is over
 
 
-def _process_file_with_timeout(jf: JobFileModel, job: JobModel) -> None:
-    """Run _process_file under a hard wall-clock budget (daemon thread join)."""
+class WorkerSuperseded(RuntimeError):
+    """Raised in a zombie worker thread once its run's token was revoked."""
+
+
+def _revoke_token(job_id: str) -> None:
+    _WORKER_TOKENS.pop(job_id, None)
+
+
+def _check_token(job_id: str, token: str) -> None:
+    """Zombie-thread gate: only the current run of a job may commit."""
+    if _WORKER_TOKENS.get(job_id) != token:
+        raise WorkerSuperseded(f"worker run for job {job_id} was superseded (timeout/cancel)")
+
+
+def _process_file_with_timeout(jf: JobFileModel, job: JobModel, token: str) -> None:
+    """Run _process_file under a hard wall-clock budget (daemon thread join).
+
+    On timeout the run's token is revoked first, so the abandoned thread
+    cannot commit ``completed`` status or results afterwards (review finding
+    #5: timeout zombie threads).
+    """
     import threading
 
     box: dict[str, Any] = {}
 
     def run():
         try:
-            _process_file(jf, job)
+            _check_token(job.id, token)  # cancelled/retimed-out before we even start
+            _process_file(jf, job, token)
         except Exception as exc:  # propagate to the timeout wrapper
             box["exc"] = exc
 
@@ -100,6 +145,7 @@ def _process_file_with_timeout(jf: JobFileModel, job: JobModel) -> None:
     t.start()
     t.join(FILE_TIMEOUT_S)
     if t.is_alive():
+        _revoke_token(job.id)  # zombie thread's later commits now raise
         raise TimeoutError(f"extraction exceeded {FILE_TIMEOUT_S}s")
     if "exc" in box:
         raise box["exc"]
@@ -161,7 +207,7 @@ def _load_image(path: Path):
     return loaded[0].data
 
 
-def _process_file(jf: JobFileModel, job: JobModel) -> None:
+def _process_file(jf: JobFileModel, job: JobModel, token: str | None = None) -> None:
     from engine.export import ExportOptions, export_batch
     from engine.industrial.pipeline import IndustrialVision
     from engine.ocr.pipeline import GeneralOCR
@@ -171,6 +217,8 @@ def _process_file(jf: JobFileModel, job: JobModel) -> None:
 
     session = get_session()
     try:
+        if token is not None:
+            _check_token(job.id, token)  # zombie guard before any write
         jf.status = "processing"
         session.commit()
 
@@ -188,6 +236,8 @@ def _process_file(jf: JobFileModel, job: JobModel) -> None:
             ocr=GeneralOCR([ocr_engine]),
         )
         image = _load_image(Path(jf.stored_path))
+        if token is not None:
+            _check_token(job.id, token)  # zombie guard after the slow OCR/vision step
         result = vision.process(image, file_name=jf.file_name)
         if options.get("category"):  # forced document category
             result.document_type = options["category"]
@@ -218,6 +268,9 @@ def _process_file(jf: JobFileModel, job: JobModel) -> None:
             for entry in manifest.get("files", [])
         }
         session.commit()
+    except WorkerSuperseded:
+        # Timed-out zombie thread: drop the results instead of committing them.
+        logger.warning("file %s: superseded worker thread discarded its result", jf.id)
     except Exception as exc:
         logger.exception("file %s failed", jf.id)
         jf.status = "failed"

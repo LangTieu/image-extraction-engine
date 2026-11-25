@@ -3,8 +3,19 @@ name: Deploy API image (P7)
 on:
   push:
     branches: [main]
-    paths: ["service/**"]
+    paths:
+      - "service/**"
+      - "engine/**"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "pyproject.toml"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch:
+
+# Serialize deploys: two rapid pushes must not race on port 8000 (review #8b).
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -20,16 +31,22 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Create venv and install dependencies
         run: |
+          python -m venv .venv
+          . .venv/bin/activate
           python -m pip install -e ".[dev]" || python -m pip install -e .
 
       - name: Run tests
-        run: python -m pytest tests/ -q
-
+        run: |
+          . .venv/bin/activate
+          python -m pytest tests/ -q
   build-push:
     needs: test
     runs-on: [self-hosted, lv3]
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
@@ -57,11 +74,17 @@ jobs:
     runs-on: [self-hosted, lv3]
     steps:
       - uses: actions/checkout@v4
-
-      # docker-compose.yml builds from the repo checkout (build: .), so no GHCR pull is needed;
-      # build-push above keeps the GHCR image as an artifact.
+      # Deploy the image build-push published (review #8c) instead of building
+      # again: pull the sha-tagged GHCR image and run it via compose.
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull the published image
+        run: docker pull ghcr.io/langtieu/image-extraction-engine:${{ github.sha }}
       - name: Deploy with docker compose
-        run: docker compose up -d --build
+        run: IMAGE_TAG=${{ github.sha }} docker compose up -d --no-build
 
       - name: Smoke test /v1/health
         run: |
@@ -74,4 +97,5 @@ jobs:
             sleep 5
           done
           echo "health check failed after 30 attempts"
+          docker compose logs --tail 100
           exit 1
