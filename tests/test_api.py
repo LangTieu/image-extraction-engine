@@ -404,7 +404,8 @@ def test_ui_routes_exist_on_backend() -> None:
 
 
 def _ui_src(*relpath: str) -> str:
-    return (Path(__file__).resolve().parents[1] / "service" / "web" / "src" / Path(*relpath)).read_text()
+    root = Path(__file__).resolve().parents[1] / "service" / "web" / "src"
+    return (root.joinpath(*relpath)).read_text()
 
 
 def test_ui_renders_text_blocks() -> None:
@@ -429,12 +430,10 @@ def test_ui_timestamps_parse_naive_as_utc() -> None:
     """
     util_src = _ui_src("util.ts")
     assert "parseUtcDate" in util_src, "util.ts must define a shared UTC-aware timestamp parser"
-    assert re.search(r"parseUtcDate\(", util_src.split("export function timeAgo")[1].split("export function")[0]), (
-        "timeAgo must parse timestamps through parseUtcDate"
-    )
-    assert re.search(r"parseUtcDate\(", util_src.split("export function formatDateTime")[1].split("export function")[0]), (
-        "formatDateTime must parse timestamps through parseUtcDate"
-    )
+    time_ago_body = util_src.split("export function timeAgo")[1].split("export function")[0]
+    assert re.search(r"parseUtcDate\(", time_ago_body), "timeAgo must use parseUtcDate"
+    fmt_body = util_src.split("export function formatDateTime")[1].split("export function")[0]
+    assert re.search(r"parseUtcDate\(", fmt_body), "formatDateTime must use parseUtcDate"
     # The parser must anchor timezone-less strings to UTC (append Z) and leave aware ones alone.
     parser = util_src.split("export function parseUtcDate")[1].split("export function")[0]
     assert "`${iso}Z`" in parser, "parseUtcDate must treat naive ISO strings as UTC"
