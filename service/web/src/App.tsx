@@ -1,222 +1,114 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { createJob, getJob, listJobs, review, exportUrl, Job, JobFile, JobField, JobStatus } from "./api";
-import "./styles.css";
+import { getHealth, getVersion, isActiveStatus, listJobs } from './api'
+import { Icon, Notice, type IconName } from './components/ui'
+import { routeHref, usePolling, useRoute, type Route } from './hooks'
+import { JobsView } from './views/JobsView'
+import { ResultsView } from './views/ResultsView'
+import { ReviewView } from './views/ReviewView'
+import { UploadView } from './views/UploadView'
 
-// Poll intervals (ms). One tab + one upload must stay under the API's
-// rate limit (60 req/min): 6 + 12 = 18 req/min per open tab.
-const LIST_POLL_MS = 10_000;
-const JOB_POLL_MS = 5_000;
+const JOBS_POLL_MS = 5_000
+const HEALTH_POLL_MS = 60_000
 
-const STATUS_CLASS: Record<JobStatus, string> = {
-  queued: "st-queued",
-  processing: "st-processing",
-  needs_review: "st-review",
-  completed: "st-completed",
-  failed: "st-failed",
-};
-
-function Badge({ status }: { status: JobStatus }) {
-  return <span className={`badge ${STATUS_CLASS[status]}`}>{status.replace("_", " ")}</span>;
-}
-
-function FieldRow({
-  job,
-  field,
-  onReviewed,
+function NavLink({
+  route,
+  current,
+  icon,
+  label,
+  count,
+  countLabel,
 }: {
-  job: Job;
-  field: JobField;
-  onReviewed: () => void;
+  route: Route
+  current: Route['view']
+  icon: IconName
+  label: string
+  count?: number
+  countLabel?: string
 }) {
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const doReview = async (action: "accept" | "reject") => {
-    setBusy(true);
-    setErr(null);
-    try {
-      await review(job.id, field.field_id ?? field.field_name, action);
-      onReviewed();
-    } catch (e) {
-      setErr(String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
+  const active = route.view === current
   return (
-    <tr className={field.needs_review ? "needs-review" : ""}>
-      <td>{field.field_name}</td>
-      <td>{String(field.value ?? "")}</td>
-      {field.needs_review && (
-        <td className="field-actions">
-          <button className="btn btn-accept" disabled={busy} onClick={() => doReview("accept")}>
-            Accept
-          </button>
-          <button className="btn btn-reject" disabled={busy} onClick={() => doReview("reject")}>
-            Reject
-          </button>
-          {err && <span className="file-error">{err}</span>}
-        </td>
-      )}
-    </tr>
-  );
-}
-
-function FileCard({ job, file, onReviewed }: { job: Job; file: JobFile; onReviewed: () => void }) {
-  return (
-    <div className="file-card">
-      <div className="file-head">
-        <strong>{file.file_name}</strong>
-        <Badge status={file.status} />
-        {file.confidence != null && (
-          <span className="conf">conf {(file.confidence * 100).toFixed(0)}%</span>
+    <li>
+      <a className={`nav-link${active ? ' active' : ''}`} href={routeHref(route)} aria-current={active ? 'page' : undefined}>
+        <Icon name={icon} />
+        <span className="nav-label">{label}</span>
+        {count !== undefined && count > 0 && (
+          <span className="nav-count">
+            {count}
+            <span className="sr-only"> {countLabel}</span>
+          </span>
         )}
-      </div>
-      {file.error && <div className="file-error">{file.error}</div>}
-      {file.result && (
-        <table className="fields">
-          <thead>
-            <tr>
-              <th>Field</th>
-              <th>Value</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {(file.result.fields ?? []).map((f) => (
-              <FieldRow key={f.field_id ?? f.field_name} job={job} field={f} onReviewed={onReviewed} />
-            ))}
-            {(file.result.fields ?? []).length === 0 && (
-              <tr>
-                <td colSpan={3}>No fields extracted</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
+      </a>
+    </li>
+  )
 }
 
 export default function App() {
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [job, setJob] = useState<Job | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const route = useRoute()
 
-  const refreshList = useCallback(() => {
-    listJobs().then(setJobs).catch(() => {});
-  }, []);
+  // While a job is open in the review screen the request budget belongs to review actions.
+  const reviewing = route.view === 'review' && route.jobId !== null
+  const jobs = usePolling('jobs', listJobs, JOBS_POLL_MS, reviewing)
+  const health = usePolling('health', getHealth, HEALTH_POLL_MS)
+  const version = usePolling('version', getVersion, null)
 
-  useEffect(() => {
-    refreshList();
-    const t = setInterval(refreshList, LIST_POLL_MS);
-    return () => clearInterval(t);
-  }, [refreshList]);
-
-  useEffect(() => {
-    if (!selected) return;
-    let stop = false;
-    const tick = () =>
-      getJob(selected)
-        .then((j) => !stop && setJob(j))
-        .catch(() => {});
-    tick();
-    const t = setInterval(tick, JOB_POLL_MS);
-    return () => {
-      stop = true;
-      clearInterval(t);
-    };
-  }, [selected]);
-
-  const upload = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    setUploading(true);
-    setError(null);
-    try {
-      const created = await createJob(Array.from(files));
-      refreshList();
-      setSelected(created.job_id);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setUploading(false);
-      if (inputRef.current) inputRef.current.value = "";
-    }
-  };
-
-  // Export formats available anywhere in the job (exports are per job).
-  const formats = job ? [...new Set(job.files.flatMap((f) => Object.keys(f.exports)))] : [];
+  const list = jobs.data ?? []
+  const activeCount = list.filter((job) => isActiveStatus(job.status)).length
+  const reviewCount = list.filter((job) => job.status === 'needs_review').length
+  const apiDown = health.error !== null || (health.data !== null && !health.data.ok)
 
   return (
     <div className="app">
-      <header>
-        <h1>Image Extraction Engine</h1>
-        <div className="upload">
-          <input
-            ref={inputRef}
-            id="file-input"
-            type="file"
-            multiple
-            accept="image/*,.pdf"
-            disabled={uploading}
-            onChange={(e) => upload(e.target.files)}
-          />
-          <label htmlFor="file-input" className="btn btn-primary">
-            {uploading ? "Uploading…" : "Upload images / PDFs"}
-          </label>
+      <aside className="sidebar">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true" />
+          <span className="brand-name">Image Extraction Engine</span>
         </div>
-      </header>
-      {error && <div className="file-error">{error}</div>}
-      <main>
-        <aside>
-          <h2>Jobs</h2>
-          <ul className="job-list">
-            {jobs.map((j) => (
-              <li
-                key={j.id}
-                className={j.id === selected ? "active" : ""}
-                onClick={() => setSelected(j.id)}
-              >
-                <span className="job-id">{j.id}</span>
-                <Badge status={j.status} />
-              </li>
-            ))}
-            {jobs.length === 0 && <li className="empty">No jobs yet</li>}
+        <nav aria-label="Main">
+          <ul className="nav">
+            <NavLink route={{ view: 'upload' }} current={route.view} icon="upload" label="Upload" />
+            <NavLink
+              route={{ view: 'jobs', jobId: null }}
+              current={route.view}
+              icon="jobs"
+              label="Jobs"
+              count={activeCount}
+              countLabel="in progress"
+            />
+            <NavLink
+              route={{ view: 'review', jobId: null }}
+              current={route.view}
+              icon="review"
+              label="Review"
+              count={reviewCount}
+              countLabel="waiting for review"
+            />
+            <NavLink route={{ view: 'results', jobId: null }} current={route.view} icon="download" label="Results" />
           </ul>
-        </aside>
-        <section>
-          {job ? (
-            <>
-              <div className="job-head">
-                <h2>
-                  {job.id} <Badge status={job.status} />
-                </h2>
-                {job.status === "processing" || job.status === "queued" ? (
-                  <progress value={job.progress} max={100} />
-                ) : null}
-              </div>
-              {formats.length > 0 && (
-                <div className="job-exports">
-                  {formats.map((fmt) => (
-                    <a key={fmt} className="btn btn-export" href={exportUrl(job.id, fmt)} download>
-                      ⬇ {fmt}
-                    </a>
-                  ))}
-                </div>
-              )}
-              {job.files.map((f) => (
-                <FileCard key={f.id} job={job} file={f} onReviewed={() => getJob(job.id).then(setJob)} />
-              ))}
-            </>
-          ) : (
-            <p className="empty">Upload images or PDFs to start an extraction job.</p>
-          )}
-        </section>
+        </nav>
+        <div className="api-status">
+          <span className={`status-dot ${apiDown ? 'status-dot-bad' : health.data ? 'status-dot-ok' : ''}`} aria-hidden="true" />
+          <span>
+            {apiDown ? 'API unavailable' : health.data ? 'API online' : 'Checking API…'}
+            {version.data && <span className="muted"> · v{version.data.replace(/^v/i, '')}</span>}
+          </span>
+        </div>
+      </aside>
+
+      <main className="main">
+        {jobs.error && (
+          <div className="main-notice">
+            <Notice tone="bad" title="Job list is not updating">
+              {jobs.error.message} Retrying automatically.
+            </Notice>
+          </div>
+        )}
+        {/* Kept mounted so a running upload survives switching views. */}
+        <div className="view-host" hidden={route.view !== 'upload'}>
+          <UploadView active={route.view === 'upload'} onJobCreated={jobs.refresh} />
+        </div>
+        {route.view === 'jobs' && <JobsView jobs={jobs} jobId={route.jobId} />}
+        {route.view === 'review' && <ReviewView jobs={jobs} jobId={route.jobId} />}
+        {route.view === 'results' && <ResultsView jobs={jobs} jobId={route.jobId} />}
       </main>
     </div>
-  );
+  )
 }
