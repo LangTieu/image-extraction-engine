@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     # Security / limits. Empty api_key disables authentication (dev default).
     api_key_env: str = "IMAGE_ENGINE_API_KEY"
     rate_limit_per_minute: int = 60
+    max_files_per_job: int = 50  # reject uploads with more files than this
     retention_days: int = 30  # 0 keeps artifacts forever
 
     # External vision APIs stay off unless explicitly enabled (brief item 7).

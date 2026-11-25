@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createJob, getJob, listJobs, review, exportUrl, Job, JobFile, JobStatus } from "./api";
+import { createJob, getJob, listJobs, review, exportUrl, Job, JobFile, JobField, JobStatus } from "./api";
 import "./styles.css";
+
+// Poll intervals (ms). One tab + one upload must stay under the API's
+// rate limit (60 req/min): 6 + 12 = 18 req/min per open tab.
+const LIST_POLL_MS = 10_000;
+const JOB_POLL_MS = 5_000;
 
 const STATUS_CLASS: Record<JobStatus, string> = {
   queued: "st-queued",
@@ -14,23 +19,23 @@ function Badge({ status }: { status: JobStatus }) {
   return <span className={`badge ${STATUS_CLASS[status]}`}>{status.replace("_", " ")}</span>;
 }
 
-function FileCard({
+function FieldRow({
   job,
-  file,
+  field,
   onReviewed,
 }: {
   job: Job;
-  file: JobFile;
+  field: JobField;
   onReviewed: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const doReview = async (action: "accept" | "reject", value?: string) => {
+  const doReview = async (action: "accept" | "reject") => {
     setBusy(true);
     setErr(null);
     try {
-      await review(job.id, file.id, action, value);
+      await review(job.id, field.field_id ?? field.field_name, action);
       onReviewed();
     } catch (e) {
       setErr(String(e));
@@ -39,6 +44,26 @@ function FileCard({
     }
   };
 
+  return (
+    <tr className={field.needs_review ? "needs-review" : ""}>
+      <td>{field.field_name}</td>
+      <td>{String(field.value ?? "")}</td>
+      {field.needs_review && (
+        <td className="field-actions">
+          <button className="btn btn-accept" disabled={busy} onClick={() => doReview("accept")}>
+            Accept
+          </button>
+          <button className="btn btn-reject" disabled={busy} onClick={() => doReview("reject")}>
+            Reject
+          </button>
+          {err && <span className="file-error">{err}</span>}
+        </td>
+      )}
+    </tr>
+  );
+}
+
+function FileCard({ job, file, onReviewed }: { job: Job; file: JobFile; onReviewed: () => void }) {
   return (
     <div className="file-card">
       <div className="file-head">
@@ -55,46 +80,21 @@ function FileCard({
             <tr>
               <th>Field</th>
               <th>Value</th>
+              <th />
             </tr>
           </thead>
           <tbody>
             {(file.result.fields ?? []).map((f) => (
-              <tr key={f.field_name} className={f.needs_review ? "needs-review" : ""}>
-                <td>{f.field_name}</td>
-                <td>{String(f.value ?? "")}</td>
-              </tr>
+              <FieldRow key={f.field_id ?? f.field_name} job={job} field={f} onReviewed={onReviewed} />
             ))}
             {(file.result.fields ?? []).length === 0 && (
               <tr>
-                <td colSpan={2}>No fields extracted</td>
+                <td colSpan={3}>No fields extracted</td>
               </tr>
             )}
           </tbody>
         </table>
       )}
-      <div className="file-actions">
-        {Object.keys(file.exports).map((fmt) => (
-          <a
-            key={fmt}
-            className="btn btn-export"
-            href={exportUrl(job.id, file.id, fmt)}
-            download
-          >
-            ⬇ {fmt}
-          </a>
-        ))}
-        {file.status === "needs_review" && (
-          <>
-            <button className="btn btn-accept" disabled={busy} onClick={() => doReview("accept")}>
-              Accept
-            </button>
-            <button className="btn btn-reject" disabled={busy} onClick={() => doReview("reject")}>
-              Reject
-            </button>
-          </>
-        )}
-        {err && <span className="file-error">{err}</span>}
-      </div>
     </div>
   );
 }
@@ -113,7 +113,7 @@ export default function App() {
 
   useEffect(() => {
     refreshList();
-    const t = setInterval(refreshList, 3000);
+    const t = setInterval(refreshList, LIST_POLL_MS);
     return () => clearInterval(t);
   }, [refreshList]);
 
@@ -125,7 +125,7 @@ export default function App() {
         .then((j) => !stop && setJob(j))
         .catch(() => {});
     tick();
-    const t = setInterval(tick, 1500);
+    const t = setInterval(tick, JOB_POLL_MS);
     return () => {
       stop = true;
       clearInterval(t);
@@ -147,6 +147,9 @@ export default function App() {
       if (inputRef.current) inputRef.current.value = "";
     }
   };
+
+  // Export formats available anywhere in the job (exports are per job).
+  const formats = job ? [...new Set(job.files.flatMap((f) => Object.keys(f.exports)))] : [];
 
   return (
     <div className="app">
@@ -196,6 +199,15 @@ export default function App() {
                   <progress value={job.progress} max={100} />
                 ) : null}
               </div>
+              {formats.length > 0 && (
+                <div className="job-exports">
+                  {formats.map((fmt) => (
+                    <a key={fmt} className="btn btn-export" href={exportUrl(job.id, fmt)} download>
+                      ⬇ {fmt}
+                    </a>
+                  ))}
+                </div>
+              )}
               {job.files.map((f) => (
                 <FileCard key={f.id} job={job} file={f} onReviewed={() => getJob(job.id).then(setJob)} />
               ))}

@@ -255,7 +255,7 @@ def test_exports_json_and_xlsx(client: TestClient) -> None:
     assert resp.status_code == 200
 
     created = client.post(f"/v1/jobs/{job_id}/exports", json={"formats": ["xlsx", "json"]})
-    assert created.status_code == 202, created.text
+    assert created.status_code == 200, created.text  # P7 review fix #7: sync 200, not 202
 
     js = client.get(f"/v1/jobs/{job_id}/exports/json")
     assert js.status_code == 200
@@ -306,3 +306,66 @@ def test_auth_missing_wrong_and_correct_key(api_key_client: TestClient) -> None:
 
 def test_auth_health_still_open_without_key(api_key_client: TestClient) -> None:
     assert api_key_client.get("/v1/health").status_code == 200
+
+
+# --------------------------------------------------------------- UI <-> API contract
+
+
+def _router_routes() -> set[tuple[str, str]]:
+    from fastapi.routing import APIRoute
+
+    from service.api.app import app as fastapi_app
+    from service.api.app import router
+
+    routes = set()
+    for r in [*fastapi_app.routes, *router.routes]:
+        if isinstance(r, APIRoute):
+            for method in (r.methods or set()) - {"HEAD", "OPTIONS"}:
+                routes.add((method.lower(), r.path))
+    return routes
+
+
+def _collect_ui_calls() -> set[tuple[str, str]]:
+    """Extract (METHOD, path-template) pairs from the UI's api.ts source."""
+    import re
+
+    src = (Path(__file__).resolve().parents[1] / "service" / "web" / "src" / "api.ts").read_text()
+    calls: set[tuple[str, str]] = set()
+    for m in re.finditer(r"fetch\(\s*`([^`]+)`\s*,\s*\{[^}]*method:\s*[\"'](\w+)", src):
+        if m.group(2).lower() in {"get", "post", "put", "patch", "delete"}:
+            calls.add((m.group(2).lower(), m.group(1)))
+    for m in re.finditer(r"fetch\(\s*`([^`]+)`\s*\)", src):  # no-options fetch = GET
+        calls.add(("get", m.group(1)))
+    return calls
+
+
+def test_ui_api_base_path_is_v1() -> None:
+    """P7 review fix #1: the UI must call the backend's real /v1 prefix."""
+    src = (Path(__file__).resolve().parents[1] / "service" / "web" / "src" / "api.ts").read_text()
+    assert 'const BASE = "/v1"' in src, "UI must call the backend's real /v1 prefix"
+
+
+def test_ui_routes_exist_on_backend() -> None:
+    """Every fetch template in api.ts must match a real route (method+shape).
+
+    Fails on the pre-fix UI, which called POST /v1/jobs/{id}/files/{fid}/review
+    and POST /v1/jobs/{id}/files/{fid}/export — routes that never existed.
+    """
+    import re
+
+    backend = _router_routes()
+    calls = _collect_ui_calls()
+    assert calls, "no fetch calls found in api.ts — parser or file changed?"
+    for method, template in calls:
+        path = re.sub(r"^\$\{BASE\}", "/v1", template)
+        wildcard = re.sub(r"\$\{[^}]+\}", "*", path)
+        match = any(
+            m == method
+            and len(p.split("/")) == len(wildcard.split("/"))
+            and all(
+                seg == "*" or seg == pseg
+                for seg, pseg in zip(wildcard.split("/"), p.split("/"))
+            )
+            for m, p in backend
+        )
+        assert match, f"UI calls {method.upper()} {template} but backend has no such route"

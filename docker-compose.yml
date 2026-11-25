@@ -3,6 +3,7 @@
 # SERVICE_DB_URL, then run the same image as `rq worker-pool iee`.
 services:
   api:
+    image: ghcr.io/langtieu/image-extraction-engine:${IMAGE_TAG:-latest}
     build: .
     ports:
       - "8000:8000"
