@@ -438,17 +438,28 @@ def test_blur_flag_uses_resolution_normalized_variance():
 def test_perspective_falls_back_to_border_lines():
     """Glare-broken screen outline: the quad detector must still find the
     screen via the border-line / gradient fallback, and the enhancement
-    pipeline must run to completion."""
-    from engine.industrial.screen import _border_line_quad
-    from engine.preprocessing.io import load_input
+    pipeline must run to completion.
 
-    page = load_input("/tmp/tcm-plc.jpg")[0].data
-    quad = _border_line_quad(cv2.cvtColor(page, cv2.COLOR_RGB2GRAY))
+    Uses a synthetic photographed-screen image (bright rectangle on a dark
+    bezel, with text-like strokes) instead of a real photo: the previous
+    version loaded /tmp/tcm-plc.jpg, a file that exists only on LV3, so CI
+    on GitHub-hosted runners failed with FileNotFoundError.
+    """
+    import numpy as np
+
+    from engine.industrial.screen import _border_line_quad
+
+    img = np.full((600, 800, 3), 40, dtype=np.uint8)
+    img[80:520, 100:700] = 210
+    # Text-like dark strokes inside the screen, so the OCR pass has content.
+    for y in (140, 200, 260, 320):
+        img[y : y + 18, 140:560] = 60
+    quad = _border_line_quad(cv2.cvtColor(img, cv2.COLOR_RGB2GRAY))
     assert quad is not None, "border-line fallback should find the screen quad"
     from engine.industrial.pipeline import IndustrialVision
 
     vision = IndustrialVision(ocr=GeneralOCR([TesseractEngine()]))
-    result = vision.process(load_input("/tmp/tcm-plc.jpg")[0].data, file_name="tcm.jpg")
+    result = vision.process(img, file_name="synthetic-screen.jpg")
     corrections = result.extensions["industrial"]["corrections"]
     assert corrections["profile"] == "industrial_screen_photo"
     assert "screen boundary not detected" not in " ".join(result.warnings)

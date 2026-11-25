@@ -51,10 +51,12 @@ contrast, sharpen) but its gates never fired on his two real photos.
 - **Deskew / sharpen:** synthetic tests pass (5° skew straightened, blur flag
   fires only on quality-flagged blur, clean scan stays a perspective no-op).
   No measurable change on the two real photos (coil table identical).
-- **NOT done — corrections are invisible in the job result:** the result
-  `processing` dict still holds only `pipeline_path` / `module_versions` /
-  `timings_ms` — no deskew angle, no perspective/sharpen flags. The brief
-  asked for this; it is backlog, not in this merge.
+- **Corrections are recorded in-process but NOT surfaced in the API job result:**
+  `IndustrialVision` records `extensions["industrial"]["corrections"]`
+  (profile, deskew_deg, perspective_corrected — see pipeline.py `_corrections_dict`),
+  but the API result's `processing` dict still holds only `pipeline_path` /
+  `module_versions` / `timings_ms`. Surfacing the corrections in the job
+  result JSON is backlog, not in this merge.
 
 ## New tests (all in tests/test_ocr.py, fail pre-fix, pass post-fix)
 - `test_deskew_straightens_known_rotation` (5° synthetic skew)
