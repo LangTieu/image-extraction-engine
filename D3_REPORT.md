@@ -166,3 +166,45 @@ def test_general_ocr_from_options() -> None:
     assert custom.dpi == 150
 ```
 
+## Fix round 3 (2026-11-26): null job options crash default uploads
+
+Liaison-found: a default upload (no query params) stored `{"languages": null,
+...}` in job options; the worker passed `None` through to
+`TesseractEngine`, whose OCR call crashed with
+`AttributeError: 'NoneType' object has no attribute 'split'`
+(`tesseract_backend.py:57`, `self._lang.split("+")`) — job
+`job_5fe627eacdb4` in the liaison's session.
+
+Changes:
+
+- `service/worker/runner.py`: new `build_engine_options(options, profile)`
+  helper maps job options to `PreprocessOptions`/`OcrOptions`, treating an
+  explicit `null` exactly like a missing key (all four knobs: `dpi`,
+  `pdf_dpi`, `languages`, `preprocessing`); `_process_file` uses it. Also
+  configures root logging (INFO) when the embedding app has none, so the
+  effective-options INFO line actually emits.
+- `engine/options.py`: `__post_init__` guards reject `None`/empty
+  `tesseract_lang` and `paddle_lang` with a clear `ValueError` (defense in
+  depth if a future caller bypasses the worker mapping).
+- `tests/test_options.py`: +7 tests (5 parametrized null-cases, explicit
+  values still win, None langs rejected).
+
+Verification (all run in this task):
+
+| Gate | Result |
+| --- | --- |
+| `pytest tests/ -q -p no:warnings` | 221 passed (baseline 214) |
+| `python -m benchmark.validate` | 35 passed, 0 failed |
+| `ruff check` (touched files) | All checks passed |
+| `mypy engine/options.py service/worker/runner.py` | Success |
+
+Live smoke on `uvicorn service.api.app:app` (port 3000): the brief's failing
+upload (`POST /v1/jobs`, no query params, PNG in
+`benchmark/seed/photo_document/images/`) now completes — job
+`job_eb311f82016c`, status `completed`. Result key sets identical before vs
+after fix (top level and per-file and extraction objects). Pre-fix crash
+reproduced on stashed HEAD code with rendered text:
+`AttributeError: 'NoneType' object has no attribute 'split'`; fixed code
+raises the clear `ValueError` instead. Effective-options INFO line confirmed
+in the server log. Secret scan on the diff: clean.
+

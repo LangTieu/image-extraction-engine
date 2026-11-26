@@ -39,7 +39,7 @@ class PreprocessOptions:
     def __post_init__(self) -> None:
         if not (MIN_DPI <= self.dpi <= MAX_DPI):
             raise ValueError(f"dpi must be in [{MIN_DPI}, {MAX_DPI}], got {self.dpi}")
-        if not self.profile:
+        if self.profile is None or not self.profile:
             raise ValueError("profile must be a non-empty name")
         try:
             PreprocessingPipeline.for_profile(self.profile)
@@ -65,6 +65,10 @@ class OcrOptions:
     pdf_dpi: int = 200  # rasterization DPI for the PDF fast path
 
     def __post_init__(self) -> None:
+        if self.tesseract_lang is None or not self.tesseract_lang:
+            raise ValueError("tesseract_lang must be a non-empty string, got None/empty")
+        if self.paddle_lang is None or not self.paddle_lang:
+            raise ValueError("paddle_lang must be a non-empty string, got None/empty")
         if not (0 <= self.tesseract_psm <= 13):
             raise ValueError(f"tesseract_psm must be in [0, 13], got {self.tesseract_psm}")
         if not (0 <= self.tesseract_oem <= 3):

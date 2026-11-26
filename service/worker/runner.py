@@ -28,6 +28,16 @@ from service.core.status import derive_job_status
 
 logger = logging.getLogger(__name__)
 
+# The service ships no logging config, so INFO records (e.g. the effective
+# options line) never reach the console: Python's lastResort handler passes
+# WARNING and above only. Configure a root handler once, unless the embedding
+# app (uvicorn log config, RQ worker) already did.
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+
 # Maps a JobFileModel row to the exports dict entry written after extraction.
 DEFAULT_EXPORT_FORMATS = ("xlsx", "json", "csv")
 
@@ -219,12 +229,33 @@ def _load_image(path: Path, dpi: int = 300):
     return load_input(path, dpi=dpi)[0].data
 
 
+def build_engine_options(options: dict[str, Any], preprocessing_name: str):
+    """Map job options to engine options; explicit nulls mean "use the default".
+
+    The API stores job options verbatim, so a client that sends e.g.
+    ``{"languages": null}`` used to reach the OCR backend as ``None`` and
+    crash there (``AttributeError: 'NoneType' object has no attribute
+    'split'``). Treat None exactly like a missing key.
+    """
+    from engine.options import OcrOptions, PreprocessOptions
+
+    preprocess_options = PreprocessOptions(
+        profile=preprocessing_name,
+        overrides=options.get("preprocessing") or {},
+        dpi=int(options.get("dpi") or PreprocessOptions.dpi),
+    )
+    ocr_options = OcrOptions(
+        tesseract_lang=options.get("languages") or OcrOptions.tesseract_lang,
+        pdf_dpi=int(options.get("pdf_dpi") or OcrOptions.pdf_dpi),
+    )
+    return preprocess_options, ocr_options
+
+
 def _process_file(jf: JobFileModel, job: JobModel, token: str | None = None) -> None:
     from engine.export import ExportOptions, export_batch
     from engine.industrial.pipeline import IndustrialVision
     from engine.ocr.pipeline import GeneralOCR
     from engine.ocr.tesseract_backend import TesseractEngine
-    from engine.options import OcrOptions, PreprocessOptions
     from engine.preprocessing.pipeline import PreprocessingPipeline
     from engine.validation.validate_result import validate_result
 
@@ -243,16 +274,8 @@ def _process_file(jf: JobFileModel, job: JobModel, token: str | None = None) -> 
         # old from_dict path effectively ran with.
         available = set(PreprocessingPipeline.bundled_profiles())
         preprocessing_name = profile if profile in available else "industrial_screen_photo"
-        preprocess_options = PreprocessOptions(
-            profile=preprocessing_name,
-            overrides=options.get("preprocessing", {}),
-            dpi=int(options.get("dpi", PreprocessOptions.dpi)),
-        )
+        preprocess_options, ocr_options = build_engine_options(options, preprocessing_name)
         preprocessing = PreprocessingPipeline.from_options(preprocess_options)
-        ocr_options = OcrOptions(
-            tesseract_lang=options.get("languages", OcrOptions.tesseract_lang),
-            pdf_dpi=int(options.get("pdf_dpi", OcrOptions.pdf_dpi)),
-        )
         ocr_engine = TesseractEngine.from_options(ocr_options)
         logger.info(
             "file %s effective options: preprocess=%s ocr=%s",
