@@ -41,6 +41,11 @@ def _cap(text: str, max_chars: int) -> str:
     return text[:max_chars]
 
 
+def _single_page(provs: list[Provenance]) -> bool:
+    pages = {p.page for p in provs if p.page is not None}
+    return len(pages) <= 1
+
+
 def _page_of(provs: list[Provenance]) -> int | None:
     pages = {p.page for p in provs if p.page is not None}
     return pages.pop() if len(pages) == 1 else (provs[0].page if provs else None)
@@ -91,6 +96,8 @@ def build_chunks(
 
     blocks = [b for b in result.text_blocks if b.text]
     for block in sorted(blocks, key=lambda b: (b.reading_order is None, b.reading_order or 0)):
+        if not _single_page(block.prov):
+            continue
         chunks.append(_chunk(result, "text_block", order, block.text, block.prov, max_chars))
         order += 1
 
@@ -110,6 +117,8 @@ def build_chunks(
                             extra["coil_id"] = str(row[idx])
                             break
                 provs = table.prov or []
+                if not _single_page(provs):
+                    continue
                 chunks.append(
                     _chunk(result, "table_row", order, text, provs, max_chars, extra)
                 )
@@ -123,6 +132,8 @@ def build_chunks(
                 extra = {"table_name": table.table_name, "row_index": cell.row_index}
                 if cols and cols[cell.col_index] in ("HOT_COIL_NO", "COLD_COIL_NO", "COIL_ID"):
                     extra["coil_id"] = cell.text
+                if not _single_page(cell.prov or table.prov):
+                    continue
                 chunks.append(
                     _chunk(
                         result, "table_row", order, text,
@@ -139,6 +150,8 @@ def build_chunks(
         extra = {}
         if field.name in ("HOT_COIL_NO", "COLD_COIL_NO", "COIL_ID"):
             extra["coil_id"] = str(raw)
+        if not _single_page(field.prov):
+            continue
         chunks.append(_chunk(result, "field", order, text, field.prov, max_chars, extra))
         order += 1
 

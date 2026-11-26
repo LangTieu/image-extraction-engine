@@ -12,6 +12,10 @@
     *uncapped* text so a larger `chunk_max_chars` never silently changes ids
     for unchanged content.
   - Chunks never span pages: a chunk's `prov` entries are all from one page.
+    The first version only *claimed* this — nothing dropped a node whose prov
+    carried pages from more than one page. Fixed in the fix round: every
+    emission site (`text_block`, `table_row`, cell, `field`) now runs a
+    `_single_page(prov)` guard and silently skips a multi-page node.
   - Table rows stay separate chunks (one row = one chunk, joined with `" | "`),
     never merged across rows; rows with different coil IDs (`HOT_COIL_NO`,
     `COLD_COIL_NO`, `COIL_ID` column or field name) therefore never share a
@@ -29,7 +33,27 @@
   `GET /v1/jobs/{id}/exports/{fmt}` accepted only `xlsx|csv|json|pdf`; it now
   also accepts `chunks_jsonl` (artifact file is `<stem>.chunks_jsonl` because
   `export_batch` names files `<stem>.<format>`; download name maps it to
-  `<stem>.json`).
+  `<stem>.json`). The 422 message now reads
+  `fmt must be one of xlsx|csv|json|pdf|chunks_jsonl` (it still named only the
+  four old formats after chunks_jsonl was wired in).
+
+## Fix round (this commit): what was broken and what changed
+
+- **Single-page enforcement was missing.** `build_chunks` emitted every node
+  regardless of whether its `prov` covered more than one page. Fixed with
+  `_single_page()` guards at all four emission sites in
+  `engine/export/chunks.py`.
+- **Two tests failed against the seed fixture (6 passed, 2 failed before the
+  fix).** Both assumed every seed node carries provenance; the seed is a
+  pre-D1 fixture with `prov: null` everywhere, so seed-derived chunks
+  legitimately have empty `prov`:
+  - `test_order_and_metadata_present`: removed the blanket
+    `assert chunk["prov"]`; kept order/metadata-shape assertions, added a
+    seed-flavour prov check (all seed chunks have `prov == []`) plus a
+    synthetic prov-bearing block that must surface its prov in its chunk.
+  - `test_no_chunk_spans_two_pages`: `pages == {1}` became "a prov-bearing
+    chunk sits on exactly one page"; added a synthetic two-page block that
+    must be dropped while a single-page sibling is kept.
 
 ## Typing: ignore reduction
 
@@ -43,42 +67,41 @@
   use. N1 = **0** ≤ 0.8 × N0 = 0.8. No new ignores were added anywhere; a
   repo-wide scan after the change finds zero `type: ignore` in `engine/`.
 
-## Live smoke (port 3011)
+## Live smoke (port 3011) — re-run in the fix round
 
-- Started `uvicorn service.api.app:app` on `127.0.0.1:3011` with a throwaway
-  API key exported only into that process's environment (not stored in the
-  repo).
-- `POST /v1/jobs?export_formats=chunks_jsonl` with a PNG → 202
-  (`job_ac66ed86f145`), job reached `completed`, then
-  `GET /v1/jobs/job_ac66ed86f145/exports/chunks_jsonl?file_id=...` → **200**
-  with the artifact metadata (`coil_table_001.chunks_jsonl`, mime
-  `application/x-ndjson`).
-- The artifact body is empty for these uploads because the extractor found no
-  text/tables/fields in them (verified directly: the stored `result_json` has
-  0 text blocks, 0 tables, 0 fields → 0 chunks, and the checksum equals
-  sha256 of the empty string). The first live attempt exposed two real wiring
-  bugs, both fixed above: the download route's format allow-list, and the
-  exporter rejecting `export_batch`'s `<stem>.chunks_jsonl` file name (404/422
-  in the first two runs). Also verified in-process earlier: a coil-table
-  ground-truth result yields 10 chunks (kinds `text_block`, `table_row`,
-  `field`; coil ids `H00001`, `H00002`) and byte-identical output across two
-  runs.
+- Started `uvicorn service.api.app:app` on `127.0.0.1:3011`.
+- Seed PNGs (`coil_table_001` etc.) complete but produce empty artifacts:
+  `detect_glare` reports glare_ratio 1.0 on every seed image (white
+  synthetics), the pipeline blanks the frame and yields 0 blocks / 0 tables /
+  0 fields → 0 chunks. Pre-existing engine behaviour, unchanged by this
+  branch; `GET .../exports/chunks_jsonl` still returns 200 with a 0-byte
+  NDJSON body.
+- To prove a non-empty path end-to-end, a rendered PNG with dark background
+  and two text lines was uploaded: 202 → `completed` → download 200 with a
+  584-byte `smoke_dark.chunks_jsonl` containing 2 `text_block` chunks
+  (`order` 0..1, each `prov` on one page), e.g.
+  `{"chunk_id":"4071479e732269f8","order":0,"kind":"text_block","text":"Batch record 42"}`.
+- `GET .../exports/bogus` → 422 with the corrected message
+  `fmt must be one of xlsx|csv|json|pdf|chunks_jsonl`.
+- Also verified in-process earlier: a coil-table ground-truth result yields
+  10 chunks (kinds `text_block`, `table_row`, `field`; coil ids `H00001`,
+  `H00002`) and byte-identical output across two runs.
 
-## Gates (exit codes)
+## Gates (exit codes) — re-run in the fix round
 
 ```
-pytest -q                                       exit=0
-python -m benchmark.validate benchmark/seed     exit=0
-ruff check .                                    exit=0
-mypy engine benchmark service tests             exit=0  (107 source files)
+.venv/bin/python -m pytest -q                     exit=0  (244 passed)
+python -m benchmark.validate benchmark/seed       exit=0  (35 passed)
+ruff check .                                      exit=0
+mypy engine benchmark service tests               exit=0  (108 source files)
 ```
 
-## Tests: tests/test_chunks.py — PLACE ON BRANCH FROM THE BLOCK BELOW
+## Tests: tests/test_chunks.py — ON BRANCH, 8 PASSED
 
-The environment blocked creating `tests/test_chunks.py` (new test files need
-an explicit ask). The full round is below; place it verbatim, then run
-`.venv/bin/python -m pytest -q` (expect 8 new tests, all passing — the
-assertions were validated against the implementation inline during this run).
+`tests/test_chunks.py` is now on the branch (placed in the fix round after
+the first round could not create it) and passes 8/8. The two tests the first
+round got wrong are repaired as described above; the rest is unchanged from
+the block below.
 
 ```python
 """D5 test round: the chunks_jsonl RAG chunk exporter (tests/test_chunks.py)."""
@@ -202,7 +225,9 @@ def test_normalize_text():
 
 - The brief's named ignore groups were already gone from `main` (removed in
   D1–D4); N0 = 1 comes from the remaining review-store ignore, removed here.
-- The live-smoke artifact being empty reflects blank seed fixtures, not a
-  defect; chunk content was proven from a real ground-truth result in-process.
+- The seed PNGs' 100% glare reading is a pre-existing preprocessing
+  characteristic of white-background synthetic fixtures, not a defect of this
+  branch; the non-empty live path was proven with a rendered dark image.
 - `service/api/app.py` was edited (outside the engine, inside the smoke path)
-  to let the new format download; flagged here per the brief.
+  to let the new format download and to correct the 422 message; flagged here
+  per the brief.

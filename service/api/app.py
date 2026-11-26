@@ -384,7 +384,7 @@ def create_exports(job_id: str, body: dict | None = None, session: Session = Dep
 def export_file(job_id: str, fmt: str, session: Session = Depends(get_db)):
     """Download one exported artifact (xlsx|csv|json|pdf|chunks_jsonl) for one file."""
     if fmt not in ("xlsx", "csv", "json", "pdf", "chunks_jsonl"):
-        raise HTTPException(422, "fmt must be one of xlsx|csv|json|pdf")
+        raise HTTPException(422, "fmt must be one of xlsx|csv|json|pdf|chunks_jsonl")
     _job_or_404(job_id, session)
     for f in session.query(JobFileModel).filter(JobFileModel.job_id == job_id).all():
         info = (f.exports or {}).get(fmt)
