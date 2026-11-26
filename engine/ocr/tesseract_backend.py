@@ -18,6 +18,13 @@ class TesseractEngine(OCREngine):
         self._oem = oem
         self._psm = psm
 
+    @classmethod
+    def from_options(cls, options) -> TesseractEngine:
+        """Build from ``engine.options.OcrOptions``."""
+        return cls(
+            lang=options.tesseract_lang, oem=options.tesseract_oem, psm=options.tesseract_psm
+        )
+
     def recognize(self, image, *, languages=("vi", "en"), min_confidence=0.0) -> OCRResult:
         t0 = time.perf_counter()
         arr = image if isinstance(image, np.ndarray) else np.asarray(image)

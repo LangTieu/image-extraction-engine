@@ -70,6 +70,13 @@ class GeneralOCR:
         self.low_confidence = low_confidence
         self.dpi = dpi
 
+    @classmethod
+    def from_options(cls, engines: list[OCREngine], options) -> GeneralOCR:
+        """Build from ``engine.options.OcrOptions``."""
+        return cls(
+            engines, low_confidence=options.low_confidence, dpi=options.pdf_dpi
+        )
+
     # image path ---------------------------------------------------------
     def recognize_image(self, image: np.ndarray, *, transform_log=None) -> OCRDocument:
         t0 = time.perf_counter()

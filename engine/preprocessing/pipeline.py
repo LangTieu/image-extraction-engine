@@ -100,6 +100,28 @@ class PreprocessingPipeline:
         return cls.from_dict(raw.get("name", Path(path).stem), raw.get("steps", {}) or {})
 
     @classmethod
+    def from_options(cls, options) -> PreprocessingPipeline:
+        """Build from ``engine.options.PreprocessOptions``.
+
+        The overrides are the steps, passed through ``from_dict`` exactly as
+        the worker always passed them (they replace, not merge, the profile's
+        steps); the profile name only labels the run and is validated by
+        ``PreprocessOptions``.
+        """
+        return cls.from_dict(
+            options.profile, {k: dict(v) for k, v in options.overrides.items()}
+        )
+
+    @classmethod
+    def bundled_profiles(cls) -> list[str]:
+        """Names of the bundled profiles in engine/preprocessing/profiles/."""
+        return sorted(
+            p.name[: -len(".yaml")]
+            for p in resources.files("engine.preprocessing").joinpath("profiles").iterdir()
+            if p.name.endswith(".yaml")
+        )
+
+    @classmethod
     def for_profile(cls, name: str) -> PreprocessingPipeline:
         """Load a bundled profile from engine/preprocessing/profiles/."""
         resource = resources.files("engine.preprocessing").joinpath(f"profiles/{name}.yaml")

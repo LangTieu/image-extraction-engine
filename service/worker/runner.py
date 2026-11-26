@@ -13,6 +13,7 @@ message and the job continues; only a job-level crash marks the job ``failed``.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import time
 from pathlib import Path
@@ -26,6 +27,16 @@ from service.core.settings import settings
 from service.core.status import derive_job_status
 
 logger = logging.getLogger(__name__)
+
+# The service ships no logging config, so INFO records (e.g. the effective
+# options line) never reach the console: Python's lastResort handler passes
+# WARNING and above only. Configure a root handler once, unless the embedding
+# app (uvicorn log config, RQ worker) already did.
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
 
 # Maps a JobFileModel row to the exports dict entry written after extraction.
 DEFAULT_EXPORT_FORMATS = ("xlsx", "json", "csv")
@@ -212,10 +223,32 @@ def _build_exports(
     return done
 
 
-def _load_image(path: Path):
+def _load_image(path: Path, dpi: int = 300):
     from engine.preprocessing.io import load_input
 
-    return load_input(path)[0].data
+    return load_input(path, dpi=dpi)[0].data
+
+
+def build_engine_options(options: dict[str, Any], preprocessing_name: str):
+    """Map job options to engine options; explicit nulls mean "use the default".
+
+    The API stores job options verbatim, so a client that sends e.g.
+    ``{"languages": null}`` used to reach the OCR backend as ``None`` and
+    crash there (``AttributeError: 'NoneType' object has no attribute
+    'split'``). Treat None exactly like a missing key.
+    """
+    from engine.options import OcrOptions, PreprocessOptions
+
+    preprocess_options = PreprocessOptions(
+        profile=preprocessing_name,
+        overrides=options.get("preprocessing") or {},
+        dpi=int(options.get("dpi") or PreprocessOptions.dpi),
+    )
+    ocr_options = OcrOptions(
+        tesseract_lang=options.get("languages") or OcrOptions.tesseract_lang,
+        pdf_dpi=int(options.get("pdf_dpi") or OcrOptions.pdf_dpi),
+    )
+    return preprocess_options, ocr_options
 
 
 def _process_file(jf: JobFileModel, job: JobModel, token: str | None = None) -> None:
@@ -236,17 +269,25 @@ def _process_file(jf: JobFileModel, job: JobModel, token: str | None = None) -> 
         profile = job.profile or settings.profile
         options: dict[str, Any] = dict(job.options or {})
 
-        preprocessing = PreprocessingPipeline.from_dict(
-            profile, options.get("preprocessing", {})
+        # The API's `profile` is a routing label (e.g. "industrial"), not a
+        # bundled preprocessing YAML name; map it to the default profile the
+        # old from_dict path effectively ran with.
+        available = set(PreprocessingPipeline.bundled_profiles())
+        preprocessing_name = profile if profile in available else "industrial_screen_photo"
+        preprocess_options, ocr_options = build_engine_options(options, preprocessing_name)
+        preprocessing = PreprocessingPipeline.from_options(preprocess_options)
+        ocr_engine = TesseractEngine.from_options(ocr_options)
+        logger.info(
+            "file %s effective options: preprocess=%s ocr=%s",
+            jf.id,
+            dataclasses.asdict(preprocess_options),
+            dataclasses.asdict(ocr_options),
         )
-        ocr_engine = TesseractEngine()
-        if options.get("languages"):
-            ocr_engine = TesseractEngine(lang=options["languages"])
         vision = IndustrialVision(
             preprocessing=preprocessing,
-            ocr=GeneralOCR([ocr_engine]),
+            ocr=GeneralOCR.from_options([ocr_engine], ocr_options),
         )
-        image = _load_image(Path(jf.stored_path))
+        image = _load_image(Path(jf.stored_path), dpi=preprocess_options.dpi)
         if token is not None:
             _check_token(job.id, token)  # zombie guard after the slow OCR/vision step
         result = vision.process(image, file_name=jf.file_name)
