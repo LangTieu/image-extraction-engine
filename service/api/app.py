@@ -36,13 +36,15 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from service.api.schemas import JobCreated, JobOut, JobStatus
 from service.core.db import JobFileModel, JobModel, get_db, new_id
-from service.core.settings import settings
+from service.core.settings import apply_model_cache_max, settings
 from service.core.status import derive_job_status
 from service.worker.runner import cancel_job, enqueue_job
 
 
 @asynccontextmanager
 async def _lifespan(app):
+    # Startup: apply the configured cache cap to the shared model factory.
+    apply_model_cache_max()
     from engine.models import default_factory
 
     yield

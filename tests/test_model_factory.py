@@ -144,3 +144,29 @@ def test_default_factory_is_shared_singleton() -> None:
     assert default_factory is factory_module.default_factory
     assert default_factory.max_live >= 1
     default_factory.release_all()
+
+
+def test_apply_model_cache_max_applies_setting() -> None:
+    """Startup helper pushes SERVICE_MODEL_CACHE_MAX onto the default factory."""
+    from service.core import settings as settings_module
+    from service.core.settings import apply_model_cache_max
+
+    original = settings_module.settings.model_cache_max
+    try:
+        settings_module.settings.model_cache_max = 1
+        assert apply_model_cache_max() == 1
+        assert default_factory.max_live == 1
+        settings_module.settings.model_cache_max = 0  # clamped to >= 1
+        assert apply_model_cache_max() == 1
+    finally:
+        settings_module.settings.model_cache_max = original
+        default_factory.release_all()
+
+
+def test_apply_model_cache_max_is_idempotent() -> None:
+    from service.core import settings as settings_module
+    from service.core.settings import apply_model_cache_max
+
+    value = apply_model_cache_max()
+    assert value == max(1, settings_module.settings.model_cache_max)
+    assert default_factory.max_live == value

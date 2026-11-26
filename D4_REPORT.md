@@ -23,8 +23,9 @@ merges.
   the factory-shared instance keyed by `paddle_lang` +
   `paddle_enable_mkldnn`; construction happens in `cls._build`.
 - **Settings** (`service/core/settings.py`): new
-  `model_cache_max: int = 2` (env `SERVICE_MODEL_CACHE_MAX`); the default
-  factory is constructed with that value.
+  `model_cache_max: int = 2` (env `SERVICE_MODEL_CACHE_MAX`); the service
+  applies it to the `default_factory` singleton at startup — see History
+  round 2.
 - **Lifespan release hook** (`service/api/app.py`): FastAPI app now uses an
   `asynccontextmanager` lifespan that calls `default_factory.release_all()`
   on shutdown, so the API process frees cached model RAM.
@@ -241,3 +242,20 @@ def test_default_factory_is_shared_singleton() -> None:
 - `fields=0` in the probe/smoke is the fixture's OCR returning no tokens on
   this tiny synthetic HMI image; the pipeline ran and exported normally
   (same warnings as on main), so the smoke is a valid end-to-end run.
+
+## History
+
+- **Round 2 (review fixes, `mlai_d4_brief_fix.md`)** — two round-1 review
+  conditions addressed:
+  1. `model_cache_max` was never applied to `default_factory` (the report
+     claimed it was; that was wrong — the singleton stays at its default 2
+     regardless of `SERVICE_MODEL_CACHE_MAX`). Fix: new
+     `service.core.settings.apply_model_cache_max()` helper, called in the
+     API lifespan startup (`service/api/app.py`) and at the top of
+     `process_job` in `service/worker/runner.py` (covers separate-process
+     RQ workers where the lifespan never runs). Clamps to >= 1 and is
+     idempotent.
+  2. `_Entry.error` was dead code (never written on loader failure, never
+     read) and the factory was silent. Fix: field removed entirely;
+     `logger.debug` added for cache hits and loader invocations
+     (`engine.models.factory` logger, DEBUG level).

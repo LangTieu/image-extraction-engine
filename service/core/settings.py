@@ -59,4 +59,18 @@ class Settings(BaseSettings):
             d.mkdir(parents=True, exist_ok=True)
 
 
+def apply_model_cache_max() -> int:
+    """Push ``model_cache_max`` onto the shared model factory (D4).
+
+    The engine package must not import service settings, so the service applies
+    the configured cap to ``default_factory`` at startup (API lifespan and
+    worker entry). Idempotent; clamps to >= 1 like the factory's own check.
+    """
+    from engine.models import default_factory
+
+    cap = max(1, settings.model_cache_max)
+    default_factory.max_live = cap
+    return cap
+
+
 settings = Settings()

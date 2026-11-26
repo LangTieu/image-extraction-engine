@@ -13,6 +13,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import logging
 import threading
 from collections import OrderedDict
 from collections.abc import Callable
@@ -46,7 +47,9 @@ class _Entry:
     value: Any
     lock: threading.Lock
     loaded: bool = False
-    error: BaseException | None = None
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -82,14 +85,15 @@ class ModelFactory:
                 self._entries.move_to_end(key)
         with entry.lock:
             if entry.loaded:
+                logger.debug("model factory cache hit for %s", key)
                 with self._lock:
                     self._hits += 1
                     self._entries.move_to_end(key)
                 return entry.value
+            logger.debug("model factory loading %s", key)
             value = loader()
             entry.value = value
             entry.loaded = True
-            entry.error = None
             with self._lock:
                 self._loads += 1
             return value

@@ -23,7 +23,7 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from service.core.db import JobFileModel, JobModel, get_session, session_scope
-from service.core.settings import settings
+from service.core.settings import apply_model_cache_max, settings
 from service.core.status import derive_job_status
 
 logger = logging.getLogger(__name__)
@@ -55,6 +55,9 @@ _WORKER_TOKENS: dict[str, str] = {}  # job_id -> current valid token
 
 def process_job(job_id: str) -> None:
     """Run one job: extract every file, then export per-file artifacts."""
+    # Worker entry: in "rq" mode this process never ran the API lifespan, so
+    # apply the configured model-cache cap here too (idempotent).
+    apply_model_cache_max()
     with session_scope() as session:
         _run_job(job_id, session)
 
