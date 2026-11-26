@@ -1,0 +1,254 @@
+{
+  "counts": {
+    "routing_mismatch": 5,
+    "field_missing": 40,
+    "field_wrong": 0,
+    "field_extra": 0,
+    "table_structure": 0,
+    "high_cer": 10
+  },
+  "groups": {
+    "routing_mismatch": [
+      {
+        "sample": "coil_table/coil_table_002.png",
+        "gt": "coil_table",
+        "pred": "industrial_hmi"
+      },
+      {
+        "sample": "coil_table/coil_table_003.png",
+        "gt": "coil_table",
+        "pred": "industrial_hmi"
+      },
+      {
+        "sample": "coil_table/coil_table_004.png",
+        "gt": "coil_table",
+        "pred": "industrial_hmi"
+      },
+      {
+        "sample": "coil_table/coil_table_001.png",
+        "gt": "coil_table",
+        "pred": "industrial_hmi"
+      },
+      {
+        "sample": "coil_table/coil_table_005.png",
+        "gt": "coil_table",
+        "pred": "industrial_hmi"
+      }
+    ],
+    "field_missing": [
+      {
+        "sample": "coil_table/coil_table_002.png",
+        "field": "HOT_COIL_NO"
+      },
+      {
+        "sample": "coil_table/coil_table_002.png",
+        "field": "THICK"
+      },
+      {
+        "sample": "coil_table/coil_table_002.png",
+        "field": "ZONE"
+      },
+      {
+        "sample": "coil_table/coil_table_002.png",
+        "field": "COLD_COIL_NO"
+      },
+      {
+        "sample": "coil_table/coil_table_002.png",
+        "field": "WIDTH"
+      },
+      {
+        "sample": "coil_table/coil_table_002.png",
+        "field": "WEIGHT"
+      },
+      {
+        "sample": "coil_table/coil_table_002.png",
+        "field": "LENGTH"
+      },
+      {
+        "sample": "coil_table/coil_table_002.png",
+        "field": "PRODUCT_CODE"
+      },
+      {
+        "sample": "coil_table/coil_table_003.png",
+        "field": "HOT_COIL_NO"
+      },
+      {
+        "sample": "coil_table/coil_table_003.png",
+        "field": "THICK"
+      },
+      {
+        "sample": "coil_table/coil_table_003.png",
+        "field": "ZONE"
+      },
+      {
+        "sample": "coil_table/coil_table_003.png",
+        "field": "COLD_COIL_NO"
+      },
+      {
+        "sample": "coil_table/coil_table_003.png",
+        "field": "WIDTH"
+      },
+      {
+        "sample": "coil_table/coil_table_003.png",
+        "field": "WEIGHT"
+      },
+      {
+        "sample": "coil_table/coil_table_003.png",
+        "field": "LENGTH"
+      },
+      {
+        "sample": "coil_table/coil_table_003.png",
+        "field": "PRODUCT_CODE"
+      },
+      {
+        "sample": "coil_table/coil_table_004.png",
+        "field": "HOT_COIL_NO"
+      },
+      {
+        "sample": "coil_table/coil_table_004.png",
+        "field": "THICK"
+      },
+      {
+        "sample": "coil_table/coil_table_004.png",
+        "field": "ZONE"
+      },
+      {
+        "sample": "coil_table/coil_table_004.png",
+        "field": "COLD_COIL_NO"
+      },
+      {
+        "sample": "coil_table/coil_table_004.png",
+        "field": "WIDTH"
+      },
+      {
+        "sample": "coil_table/coil_table_004.png",
+        "field": "WEIGHT"
+      },
+      {
+        "sample": "coil_table/coil_table_004.png",
+        "field": "LENGTH"
+      },
+      {
+        "sample": "coil_table/coil_table_004.png",
+        "field": "PRODUCT_CODE"
+      },
+      {
+        "sample": "coil_table/coil_table_001.png",
+        "field": "HOT_COIL_NO"
+      },
+      {
+        "sample": "coil_table/coil_table_001.png",
+        "field": "THICK"
+      },
+      {
+        "sample": "coil_table/coil_table_001.png",
+        "field": "ZONE"
+      },
+      {
+        "sample": "coil_table/coil_table_001.png",
+        "field": "COLD_COIL_NO"
+      },
+      {
+        "sample": "coil_table/coil_table_001.png",
+        "field": "WIDTH"
+      },
+      {
+        "sample": "coil_table/coil_table_001.png",
+        "field": "WEIGHT"
+      },
+      {
+        "sample": "coil_table/coil_table_001.png",
+        "field": "LENGTH"
+      },
+      {
+        "sample": "coil_table/coil_table_001.png",
+        "field": "PRODUCT_CODE"
+      },
+      {
+        "sample": "coil_table/coil_table_005.png",
+        "field": "HOT_COIL_NO"
+      },
+      {
+        "sample": "coil_table/coil_table_005.png",
+        "field": "THICK"
+      },
+      {
+        "sample": "coil_table/coil_table_005.png",
+        "field": "ZONE"
+      },
+      {
+        "sample": "coil_table/coil_table_005.png",
+        "field": "COLD_COIL_NO"
+      },
+      {
+        "sample": "coil_table/coil_table_005.png",
+        "field": "WIDTH"
+      },
+      {
+        "sample": "coil_table/coil_table_005.png",
+        "field": "WEIGHT"
+      },
+      {
+        "sample": "coil_table/coil_table_005.png",
+        "field": "LENGTH"
+      },
+      {
+        "sample": "coil_table/coil_table_005.png",
+        "field": "PRODUCT_CODE"
+      }
+    ],
+    "field_wrong": [],
+    "field_extra": [],
+    "table_structure": [],
+    "high_cer": [
+      {
+        "sample": "coil_table/coil_table_002.png",
+        "cer": 0.9778481012658228
+      },
+      {
+        "sample": "coil_table/coil_table_003.png",
+        "cer": 0.9778481012658228
+      },
+      {
+        "sample": "coil_table/coil_table_004.png",
+        "cer": 0.9778481012658228
+      },
+      {
+        "sample": "industrial_hmi/industrial_hmi_003.png",
+        "cer": 0.6590909090909091
+      },
+      {
+        "sample": "industrial_hmi/industrial_hmi_005.png",
+        "cer": 0.6590909090909091
+      },
+      {
+        "sample": "coil_table/coil_table_001.png",
+        "cer": 0.9778481012658228
+      },
+      {
+        "sample": "coil_table/coil_table_005.png",
+        "cer": 0.9778481012658228
+      },
+      {
+        "sample": "industrial_hmi/industrial_hmi_001.png",
+        "cer": 0.6590909090909091
+      },
+      {
+        "sample": "industrial_hmi/industrial_hmi_002.png",
+        "cer": 0.6590909090909091
+      },
+      {
+        "sample": "industrial_hmi/industrial_hmi_004.png",
+        "cer": 0.6590909090909091
+      }
+    ]
+  },
+  "next_steps": {
+    "routing_mismatch": "Extend router rules / profile keywords for the missed categories (engine/router).",
+    "field_missing": "Check profile field regexes and region detection coverage (engine/industrial).",
+    "field_wrong": "Tune OCR for numeric fields and unit parsing; most errors are OCR-level (see high_cer).",
+    "field_extra": "Suppress hallucinated fields: require profile header match before emitting a field.",
+    "table_structure": "Prefer the ruled backend on ruled coil tables; tune ruled_line_scale / cluster_gap_factor.",
+    "high_cer": "Preprocessing profile for dark HMI scenes (invert/contrast) is the highest-leverage fix."
+  }
+}

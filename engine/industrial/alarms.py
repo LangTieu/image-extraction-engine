@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from engine.ocr.base import OCRToken
+from engine.schema.models import Provenance
 
 TIMESTAMP_RE = re.compile(
     r"(\d{4}[-/]\d{2}[-/]\d{2}[ T]?\d{1,2}:\d{2}(?::\d{2})?)"
@@ -36,6 +37,10 @@ class AlarmEntry:
     severity: str | None  # critical | warning | info | None (unknown)
     color: str | None = None
     flags: list[str] = field(default_factory=list)
+    # Position of the alarm banner in ORIGINAL-image coordinates. None when
+    # the caller had no transform log (raw working-space crop only) — see
+    # IndustrialVision._extract_alarms.
+    prov: list[Provenance] | None = None
 
 
 @dataclass

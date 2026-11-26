@@ -23,7 +23,17 @@ class ExtractionStatus(StrEnum):
 
 
 class BBox(BaseModel):
-    """Axis-aligned bounding box in pixels: x0, y0, x1, y1."""
+    """Axis-aligned bounding box in pixels: x0, y0, x1, y1.
+
+    Coordinate-space convention (applies to every ``bbox`` field on every
+    model — TextBlock, FieldValue, Table, TableCell): ``bbox`` is in the
+    WORKING-image space of the producer that emitted it (the rectified /
+    enhanced image it measured, the same space as its OCR tokens).
+    ``Provenance.bbox`` is the SAME region mapped back to ORIGINAL source
+    coordinates. Consumers that need source-aligned geometry (validation
+    bbox checks, export preview overlays) must read ``prov.bbox``; consumers
+    that need to compare against OCR tokens or regions read ``bbox``.
+    """
 
     x0: float
     y0: float

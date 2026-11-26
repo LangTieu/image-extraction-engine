@@ -154,7 +154,7 @@ class IndustrialVision:
         regions = detect_regions(working, model_hook=self.detector_hook)
         tables = self._extract_coil_tables(working, profile, warnings, transform_log=ocr_log)
         fields = self._extract_fields(working, regions, profile, transform_log=ocr_log)
-        alarm_entries = self._extract_alarms(working, regions)
+        alarm_entries = self._extract_alarms(working, regions, transform_log=ocr_log)
 
         # Generic-HMI fallback: heuristics found no typed regions (no
         # LABEL_VALUE etc.), so without this the OCR text discovered above
@@ -269,7 +269,12 @@ class IndustrialVision:
     # -- internal steps -----------------------------------------------------
 
     def _ocr_text_shallow(self, image: np.ndarray) -> str:
-        """Cheap whole-frame OCR used only for profile matching."""
+        """Cheap whole-frame OCR used only for profile matching.
+
+        No transform_log is passed and none is needed: the tokens here are
+        consumed as a text bag for profile cues and are never attached to any
+        bbox/prov, so they cannot mislabel provenance.
+        """
         if self._ocr is None:
             return shallow_text(image)
         result = self._ocr.recognize_image(image)
@@ -506,7 +511,7 @@ class IndustrialVision:
         return fields
 
     def _extract_alarms(
-        self, image: np.ndarray, regions: list[Region]
+        self, image: np.ndarray, regions: list[Region], transform_log=None
     ) -> list[alarm_mod.AlarmEntry]:
         entries: list[alarm_mod.AlarmEntry] = []
         for region in regions:
@@ -517,6 +522,7 @@ class IndustrialVision:
             token = OCRToken(text=reading.text, bbox=region.bbox, confidence=reading.confidence)
             entry = alarm_mod.parse_alarm_row([token], banner_color=region.color)
             if entry is not None:
+                entry.prov = _prov_for_bbox(region.bbox, transform_log)
                 entries.append(entry)
         return entries
 
@@ -539,6 +545,20 @@ class IndustrialVision:
             "severity": entry.severity,
             "color": entry.color,
             "flags": entry.flags,
+            "prov": [
+                {
+                    "page": p.page,
+                    "scale": p.scale,
+                    "coord_space": p.coord_space,
+                    "unit": p.unit,
+                    "bbox": (
+                        None
+                        if p.bbox is None
+                        else [p.bbox.x0, p.bbox.y0, p.bbox.x1, p.bbox.y1]
+                    ),
+                }
+                for p in (entry.prov or [])
+            ],
         }
 
 
@@ -657,6 +677,12 @@ def _prov_for_bbox(
         src = _map_bbox(bbox, transform_log)
     return [
         Provenance(
+            # Single-image path: 0-based page 0 and scale 1.0, matching the
+            # coil_table producers (engine/industrial/coil_table.py) so every
+            # FieldValue.prov carries the same page/scale meta as TextBlock
+            # and Table/Cell provenance.
+            page=0,
+            scale=1.0,
             bbox=BBox(x0=src[0], y0=src[1], x1=src[2], y1=src[3]),
         )
     ]

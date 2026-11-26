@@ -279,11 +279,12 @@ def test_extract_maps_bbox_through_transform_log():
     assert result.status == "completed" and result.backends_used == ["borderless"]
     table = result.tables[0]
     assert table.bbox is not None
-    # The region bbox is token coordinates scaled 2x back to original pixels.
-    assert table.bbox.x0 == pytest.approx(min(t.bbox[0] for t in tokens) * 2, abs=1.0)
-    assert table.bbox.y1 == pytest.approx(max(t.bbox[3] for t in tokens) * 2, abs=1.0)
+    # Convention (D1 round 3, condition 3): node bbox stays in the producer's
+    # WORKING space (token coordinates); only prov.bbox is mapped to original.
+    assert table.bbox.x0 == pytest.approx(min(t.bbox[0] for t in tokens), abs=1.0)
+    assert table.bbox.y1 == pytest.approx(max(t.bbox[3] for t in tokens), abs=1.0)
     assert all(c.bbox is not None for c in table.cells)
-    # Provenance: original-space box recorded before mapping, per node.
+    # Provenance: original-space box, per node.
     assert table.prov and table.prov[0].coord_space == "original"
     assert table.prov[0].unit == "px"
     assert table.prov[0].bbox.x0 == pytest.approx(min(t.bbox[0] for t in tokens) * 2, abs=1.0)

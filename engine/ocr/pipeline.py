@@ -30,10 +30,15 @@ from engine.schema.models import BBox, Provenance
 def _map_bbox(bbox, log) -> tuple[float, float, float, float]:
     if log is None:
         return bbox
-    corners = np.array([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], dtype=float)
+    # Map all four corners and take the true axis-aligned bounding box: under
+    # rotation/scale a TL/BR-only mapping can shrink the box.
+    corners = np.array(
+        [[bbox[0], bbox[1]], [bbox[2], bbox[1]], [bbox[2], bbox[3]], [bbox[0], bbox[3]]],
+        dtype=float,
+    )
     mapped = log.map_to_original(corners)
-    (ax0, ay0), (ax1, ay1) = mapped
-    return (min(ax0, ax1), min(ay0, ay1), max(ax0, ax1), max(ay0, ay1))
+    xs, ys = mapped[:, 0], mapped[:, 1]
+    return (float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max()))
 
 
 @dataclass

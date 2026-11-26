@@ -1,8 +1,13 @@
 # Photographed screens and industrial HMI panels: glare, perspective, noise.
 name: industrial_screen_photo
 steps:
+  # 0/180 detection is off: normalize_screen already rectifies the panel, and
+  # the detector's centroid tie-break assumes top-anchored content, which HMI
+  # layouts (legend/status rows at the bottom) violate — an upright panel was
+  # being flipped 180° and every OCR string came back mirrored (regressed the
+  # coil_table seed set to NO_PROFILE_MATCHED). Small-angle deskew stays on.
   orientation:
-    detect: true
+    detect: false
     deskew: true
     max_correction_angle: 10.0
   perspective:

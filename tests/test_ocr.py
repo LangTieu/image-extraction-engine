@@ -233,14 +233,23 @@ def test_bbox_original_after_known_deskew():
     assert block.bbox_original is not None and tuple(block.bbox_original) != tuple(
         block.bbox
     )
-    # Expected: the processed box corners mapped by the known deskew matrix.
-    corners = np.array([[box[0], box[1], 1.0], [box[2], box[3], 1.0]])
+    # Expected: all four box corners mapped by the known deskew matrix,
+    # then the true axis-aligned bounding box (matches the producer's
+    # 4-corner mapping).
+    corners = np.array(
+        [
+            [box[0], box[1], 1.0],
+            [box[2], box[1], 1.0],
+            [box[2], box[3], 1.0],
+            [box[0], box[3], 1.0],
+        ]
+    )
     mapped = corners @ inv_matrix.T
     expected = (
-        float(min(mapped[0, 0], mapped[1, 0])),
-        float(min(mapped[0, 1], mapped[1, 1])),
-        float(max(mapped[0, 0], mapped[1, 0])),
-        float(max(mapped[0, 1], mapped[1, 1])),
+        float(mapped[:, 0].min()),
+        float(mapped[:, 1].min()),
+        float(mapped[:, 0].max()),
+        float(mapped[:, 1].max()),
     )
     orig = block.bbox_original
     assert (orig[0], orig[1], orig[2], orig[3]) == pytest.approx(expected, abs=0.5)
@@ -387,8 +396,8 @@ def test_industrial_vision_generic_hmi_returns_text_blocks():
 
 
 def test_industrial_vision_text_blocks_carry_provenance():
-    """F4(c): end-to-end via IndustrialVision.process — every text block
-    carries provenance pointing at the original image coordinates."""
+    """F4(c) + N7: end-to-end via IndustrialVision.process — every text block
+    carries provenance with a NUMERIC original-space bbox, not just meta."""
     from engine.industrial.pipeline import IndustrialVision
     from engine.preprocessing.pipeline import PreprocessingPipeline
 
@@ -404,6 +413,47 @@ def test_industrial_vision_text_blocks_carry_provenance():
             assert p.coord_space == "original"
             assert p.page == 0
             assert p.unit == "px"
+            assert p.bbox is not None
+            assert p.bbox.x1 > p.bbox.x0 and p.bbox.y1 > p.bbox.y0
+
+
+def test_prov_bbox_numeric_after_known_upscale():
+    """N7: with a known x2 working-image upscale, a token detected at a known
+    working-space box must carry prov.bbox = box/2 in original coordinates."""
+
+    img = _text_image()
+    box = (60.0, 40.0, 120.0, 60.0)
+    log = TransformLog()
+    # TransformLog.add stores the matrix that maps post-step coordinates back
+    # to pre-step (original) coordinates, matching what the real producers
+    # record for an upscale step (see transforms.upscale).
+    log.add("upscale", np.diag([0.5, 0.5, 1.0]))
+    # Producer OCRs the x2-upscaled working image and sees the box doubled
+    # relative to the original; prov must map it back to /2.
+    working_box = tuple(v * 2 for v in box)
+    doc = GeneralOCR([StubEngine([("A", working_box, 0.9)])])
+    result = doc.recognize_image(img, transform_log=log)
+    block = result.pages[0][0]
+    assert block.prov and block.prov[0].bbox is not None
+    pb = block.prov[0].bbox
+    assert (pb.x0, pb.y0, pb.x1, pb.y1) == pytest.approx(box, abs=0.5)
+
+
+def test_pdf_mixed_dpi_pages_carry_different_prov_scales(tmp_path):
+    """N8: restored per-page-scale coverage — the same two-page PDF rendered
+    at different DPIs must produce different prov.scale values (dpi/72)."""
+    pdf = str(tmp_path / "two.pdf")
+    _write_text_layer_pdf_pages(pdf, ["FIRST PAGE TEXT", "SECOND PAGE TEXT"])
+
+    low = GeneralOCR([StubEngine([("A", (100, 50, 200, 70), 0.9)])], dpi=100).recognize_pdf(pdf)
+    high = GeneralOCR([StubEngine([("A", (100, 50, 200, 70), 0.9)])], dpi=200).recognize_pdf(pdf)
+    for result, dpi in ((low, 100), (high, 200)):
+        for page_blocks in result.pages:
+            assert page_blocks
+            for block in page_blocks:
+                assert block.prov
+                assert block.prov[0].scale == pytest.approx(dpi / 72.0)
+    assert low.pages[0][0].prov[0].scale != high.pages[0][0].prov[0].scale
 
 
 # --- coil-table fix: gutter noise columns, toolbar header, duplicate warnings
