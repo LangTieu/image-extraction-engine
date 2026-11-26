@@ -59,6 +59,8 @@ class ExportOptions:
     # Image previews
     image_dir: Path | None = None  # where to resolve result.source.file_name
     field_crops: bool = False  # also write per-field crop thumbnails
+    # Chunks (NDJSON)
+    chunk_max_chars: int = 1200  # hard cap per chunk text (D5)
     # Batch
     zip_bundle: bool = False  # bundle artifacts + manifest into a .zip
 

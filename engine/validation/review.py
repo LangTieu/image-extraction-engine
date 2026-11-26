@@ -214,7 +214,10 @@ class ReviewBackend:
         self.store_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     def _load(self) -> None:
-        payload = json.loads(self.store_path.read_text(encoding="utf-8"))  # type: ignore[union-attr]
+        store = self.store_path
+        if store is None:
+            return
+        payload = json.loads(store.read_text(encoding="utf-8"))
         self.items = {d["item_id"]: ReviewItem.from_dict(d) for d in payload}
 
 

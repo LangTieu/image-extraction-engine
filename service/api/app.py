@@ -382,8 +382,8 @@ def create_exports(job_id: str, body: dict | None = None, session: Session = Dep
 
 @router.get("/jobs/{job_id}/exports/{fmt}")
 def export_file(job_id: str, fmt: str, session: Session = Depends(get_db)):
-    """Download one exported artifact (xlsx|csv|json|pdf) for one file."""
-    if fmt not in ("xlsx", "csv", "json", "pdf"):
+    """Download one exported artifact (xlsx|csv|json|pdf|chunks_jsonl) for one file."""
+    if fmt not in ("xlsx", "csv", "json", "pdf", "chunks_jsonl"):
         raise HTTPException(422, "fmt must be one of xlsx|csv|json|pdf")
     _job_or_404(job_id, session)
     for f in session.query(JobFileModel).filter(JobFileModel.job_id == job_id).all():
@@ -393,7 +393,8 @@ def export_file(job_id: str, fmt: str, session: Session = Depends(get_db)):
         path = settings.artifacts_dir / f.id / info["path"]
         if not path.exists():
             raise HTTPException(410, f"artifact missing on disk: {info['path']}")
-        download_name = Path(f.file_name).stem + "." + fmt
+        suffix = "json" if fmt == "chunks_jsonl" else fmt
+        download_name = Path(f.file_name).stem + "." + suffix
         return FileResponse(path, media_type=info["mime"], filename=download_name)
     raise HTTPException(404, f"no {fmt} export in job {job_id}")
 
