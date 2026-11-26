@@ -100,3 +100,11 @@ def test_pagination_and_page_count(tmp_path):
     Image.new("RGB", (60, 40), "white").save(png, "PNG")
     assert image_backend.page_count(png) == 1
 ```
+
+## Liaison verification (26/11, after placing the test file)
+- Extracted the fenced block verbatim into `tests/test_backends.py` (5 tests).
+- `pytest tests/test_backends.py`: 5 passed, exit 0.
+- Full suite: **179 tests, 0 failures** (junitxml count, liaison run).
+- `lv3.sh verify`: pytest 0, validate 35 passed, ruff clean, mypy 0 errors
+  (79 source files), validation eval F1 0.8, industrial eval routing 1.0 /
+  F1 0.933 / unit 0.875.
