@@ -17,15 +17,24 @@ from engine.ocr.base import OCREngine, OCRResult, OCRToken, normalize_text
 class PaddleOCREngine(OCREngine):
     name = "paddle"
 
+    _enable_mkldnn: bool = False  # oneDNN PIR conversion crashes on this CPU family
+
     def __init__(self, lang: str = "vi") -> None:
         self._lang = lang
         self._ocr = None  # lazy
+
+    @classmethod
+    def from_options(cls, options) -> PaddleOCREngine:
+        """Build from ``engine.options.OcrOptions``."""
+        engine = cls(lang=options.paddle_lang)
+        engine._enable_mkldnn = options.paddle_enable_mkldnn
+        return engine
 
     def _ensure_model(self):
         if self._ocr is None:
             from paddleocr import PaddleOCR
 
-            self._ocr = PaddleOCR(lang=self._lang, enable_mkldnn=False)
+            self._ocr = PaddleOCR(lang=self._lang, enable_mkldnn=self._enable_mkldnn)
         return self._ocr
 
     def recognize(self, image, *, languages=("vi", "en"), min_confidence=0.0) -> OCRResult:

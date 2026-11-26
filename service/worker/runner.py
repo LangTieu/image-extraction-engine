@@ -212,10 +212,10 @@ def _build_exports(
     return done
 
 
-def _load_image(path: Path):
+def _load_image(path: Path, dpi: int = 300):
     from engine.preprocessing.io import load_input
 
-    return load_input(path)[0].data
+    return load_input(path, dpi=dpi)[0].data
 
 
 def _process_file(jf: JobFileModel, job: JobModel, token: str | None = None) -> None:
@@ -223,6 +223,7 @@ def _process_file(jf: JobFileModel, job: JobModel, token: str | None = None) -> 
     from engine.industrial.pipeline import IndustrialVision
     from engine.ocr.pipeline import GeneralOCR
     from engine.ocr.tesseract_backend import TesseractEngine
+    from engine.options import OcrOptions, PreprocessOptions
     from engine.preprocessing.pipeline import PreprocessingPipeline
     from engine.validation.validate_result import validate_result
 
@@ -236,17 +237,22 @@ def _process_file(jf: JobFileModel, job: JobModel, token: str | None = None) -> 
         profile = job.profile or settings.profile
         options: dict[str, Any] = dict(job.options or {})
 
-        preprocessing = PreprocessingPipeline.from_dict(
-            profile, options.get("preprocessing", {})
+        preprocess_options = PreprocessOptions(
+            profile=profile,
+            overrides=options.get("preprocessing", {}),
+            dpi=int(options.get("dpi", PreprocessOptions.dpi)),
         )
-        ocr_engine = TesseractEngine()
-        if options.get("languages"):
-            ocr_engine = TesseractEngine(lang=options["languages"])
+        preprocessing = PreprocessingPipeline.from_options(preprocess_options)
+        ocr_options = OcrOptions(
+            tesseract_lang=options.get("languages", OcrOptions.tesseract_lang),
+            pdf_dpi=int(options.get("pdf_dpi", OcrOptions.pdf_dpi)),
+        )
+        ocr_engine = TesseractEngine.from_options(ocr_options)
         vision = IndustrialVision(
             preprocessing=preprocessing,
-            ocr=GeneralOCR([ocr_engine]),
+            ocr=GeneralOCR.from_options([ocr_engine], ocr_options),
         )
-        image = _load_image(Path(jf.stored_path))
+        image = _load_image(Path(jf.stored_path), dpi=preprocess_options.dpi)
         if token is not None:
             _check_token(job.id, token)  # zombie guard after the slow OCR/vision step
         result = vision.process(image, file_name=jf.file_name)
