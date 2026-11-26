@@ -13,6 +13,7 @@ message and the job continues; only a job-level crash marks the job ``failed``.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import time
 from pathlib import Path
@@ -237,8 +238,13 @@ def _process_file(jf: JobFileModel, job: JobModel, token: str | None = None) -> 
         profile = job.profile or settings.profile
         options: dict[str, Any] = dict(job.options or {})
 
+        # The API's `profile` is a routing label (e.g. "industrial"), not a
+        # bundled preprocessing YAML name; map it to the default profile the
+        # old from_dict path effectively ran with.
+        available = set(PreprocessingPipeline.bundled_profiles())
+        preprocessing_name = profile if profile in available else "industrial_screen_photo"
         preprocess_options = PreprocessOptions(
-            profile=profile,
+            profile=preprocessing_name,
             overrides=options.get("preprocessing", {}),
             dpi=int(options.get("dpi", PreprocessOptions.dpi)),
         )
@@ -248,6 +254,12 @@ def _process_file(jf: JobFileModel, job: JobModel, token: str | None = None) -> 
             pdf_dpi=int(options.get("pdf_dpi", OcrOptions.pdf_dpi)),
         )
         ocr_engine = TesseractEngine.from_options(ocr_options)
+        logger.info(
+            "file %s effective options: preprocess=%s ocr=%s",
+            jf.id,
+            dataclasses.asdict(preprocess_options),
+            dataclasses.asdict(ocr_options),
+        )
         vision = IndustrialVision(
             preprocessing=preprocessing,
             ocr=GeneralOCR.from_options([ocr_engine], ocr_options),

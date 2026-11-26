@@ -113,6 +113,15 @@ class PreprocessingPipeline:
         )
 
     @classmethod
+    def bundled_profiles(cls) -> list[str]:
+        """Names of the bundled profiles in engine/preprocessing/profiles/."""
+        return sorted(
+            p.name[: -len(".yaml")]
+            for p in resources.files("engine.preprocessing").joinpath("profiles").iterdir()
+            if p.name.endswith(".yaml")
+        )
+
+    @classmethod
     def for_profile(cls, name: str) -> PreprocessingPipeline:
         """Load a bundled profile from engine/preprocessing/profiles/."""
         resource = resources.files("engine.preprocessing").joinpath(f"profiles/{name}.yaml")

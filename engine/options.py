@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from engine.preprocessing.io import DEFAULT_DPI
+from engine.preprocessing.pipeline import PreprocessingPipeline
 
 MIN_DPI = 72
 MAX_DPI = 600
@@ -40,6 +41,10 @@ class PreprocessOptions:
             raise ValueError(f"dpi must be in [{MIN_DPI}, {MAX_DPI}], got {self.dpi}")
         if not self.profile:
             raise ValueError("profile must be a non-empty name")
+        try:
+            PreprocessingPipeline.for_profile(self.profile)
+        except FileNotFoundError:
+            raise ValueError(f"unknown preprocessing profile: {self.profile!r}") from None
 
 
 @dataclass(frozen=True)
