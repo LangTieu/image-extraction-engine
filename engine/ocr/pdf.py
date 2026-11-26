@@ -33,6 +33,8 @@ class PageText:
 class PdfiumTextLayer:
     """Extract per-character boxes from a PDF's embedded text layer."""
 
+    name = "pypdfium2"
+
     def __init__(self, min_chars: int = 10) -> None:
         self.min_chars = min_chars
 

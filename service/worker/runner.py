@@ -215,8 +215,7 @@ def _build_exports(
 def _load_image(path: Path):
     from engine.preprocessing.io import load_input
 
-    loaded = load_input(path)
-    return loaded[0].data
+    return load_input(path)[0].data
 
 
 def _process_file(jf: JobFileModel, job: JobModel, token: str | None = None) -> None:
