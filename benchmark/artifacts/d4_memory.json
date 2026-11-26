@@ -1,0 +1,16 @@
+{
+  "n": 10,
+  "seed_image": "benchmark/seed/industrial_hmi/images/industrial_hmi_001.png",
+  "profile": "industrial_screen_photo",
+  "rss_before_mb": 125.7,
+  "rss_after_mb": 132.8,
+  "peak_rss_mb": 147.7,
+  "elapsed_s": 3.01,
+  "factory_stats": {
+    "loads": 1,
+    "hits": 10,
+    "live": 1
+  },
+  "fields_in_last_result": 0,
+  "budget_gb": 7.0
+}

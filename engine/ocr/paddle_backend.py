@@ -14,6 +14,13 @@ import numpy as np
 from engine.ocr.base import OCREngine, OCRResult, OCRToken, normalize_text
 
 
+def _paddle_options_hash(options) -> str:
+    """Hash only the fields that change predictor construction."""
+    from engine.models import options_hash as _full_hash
+
+    return _full_hash([options.paddle_lang, options.paddle_enable_mkldnn])
+
+
 class PaddleOCREngine(OCREngine):
     name = "paddle"
 
@@ -25,7 +32,23 @@ class PaddleOCREngine(OCREngine):
 
     @classmethod
     def from_options(cls, options) -> PaddleOCREngine:
-        """Build from ``engine.options.OcrOptions``."""
+        """Return the shared instance from ``engine.options.OcrOptions``.
+
+        The predictor is heavy (~hundreds of MB once loaded), so instances are
+        shared through the D4 model factory, keyed by lang + mkldnn flag.
+        """
+        from engine.models import ModelKey, default_factory
+
+        key = ModelKey(
+            engine="paddle",
+            variant=options.paddle_lang,
+            device="cpu",
+            options_hash=_paddle_options_hash(options),
+        )
+        return default_factory.get(key, lambda: cls._build(options))
+
+    @classmethod
+    def _build(cls, options) -> PaddleOCREngine:
         engine = cls(lang=options.paddle_lang)
         engine._enable_mkldnn = options.paddle_enable_mkldnn
         return engine

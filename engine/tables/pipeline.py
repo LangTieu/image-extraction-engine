@@ -54,9 +54,21 @@ def _make_backend(name: str, config: TableConfig) -> TableBackend:
 
         return HybridBackend(config)
     if name == "tatr":
+        from engine.models import ModelKey, default_factory, options_hash
         from engine.tables.tatr import TATRBackend
 
-        return TATRBackend(config)
+        # Share one TATRBackend per (model pair, config): weights are loaded
+        # lazily by the backend and cached here, so concurrent pipelines and
+        # sequential files reuse the loaded models instead of reloading.
+        return default_factory.get(
+            ModelKey(
+                engine="tatr",
+                variant=f"{config.tatr_detection_model}|{config.tatr_structure_model}",
+                device="cpu",
+                options_hash=options_hash(config),
+            ),
+            lambda: TATRBackend(config),
+        )
     raise ValueError(f"unknown table backend: {name!r}; expected one of {TABLE_BACKENDS}")
 
 

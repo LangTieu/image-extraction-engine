@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import time
 from collections import defaultdict, deque
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, cast
 
@@ -35,11 +36,24 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from service.api.schemas import JobCreated, JobOut, JobStatus
 from service.core.db import JobFileModel, JobModel, get_db, new_id
-from service.core.settings import settings
+from service.core.settings import apply_model_cache_max, settings
 from service.core.status import derive_job_status
 from service.worker.runner import cancel_job, enqueue_job
 
-app = FastAPI(title=settings.app_name, version="7.0.0")
+
+@asynccontextmanager
+async def _lifespan(app):
+    # Startup: apply the configured cache cap to the shared model factory.
+    apply_model_cache_max()
+    from engine.models import default_factory
+
+    yield
+    # Shutdown: release cached heavy models (OCR / TATR) so the API process
+    # returns that RAM instead of holding them until process exit.
+    default_factory.release_all()
+
+
+app = FastAPI(title=settings.app_name, version="7.0.0", lifespan=_lifespan)
 _origins = [o for o in settings.cors_origins.split(",") if o]
 if _origins:
     app.add_middleware(
