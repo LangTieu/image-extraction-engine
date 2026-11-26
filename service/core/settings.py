@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     # External vision APIs stay off unless explicitly enabled (brief item 7).
     external_vision_apis: bool = False
 
+    # Model factory cache cap (D4): at most this many heavy model instances
+    # stay alive (LRU). Env: SERVICE_MODEL_CACHE_MAX.
+    model_cache_max: int = 2
+
     # Worker: "inprocess" (default, no Redis needed) or "rq" (Redis queue).
     worker_mode: str = "inprocess"
     redis_url: str = "redis://localhost:6379/0"

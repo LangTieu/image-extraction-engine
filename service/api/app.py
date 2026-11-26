@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import time
 from collections import defaultdict, deque
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, cast
 
@@ -39,7 +40,18 @@ from service.core.settings import settings
 from service.core.status import derive_job_status
 from service.worker.runner import cancel_job, enqueue_job
 
-app = FastAPI(title=settings.app_name, version="7.0.0")
+
+@asynccontextmanager
+async def _lifespan(app):
+    from engine.models import default_factory
+
+    yield
+    # Shutdown: release cached heavy models (OCR / TATR) so the API process
+    # returns that RAM instead of holding them until process exit.
+    default_factory.release_all()
+
+
+app = FastAPI(title=settings.app_name, version="7.0.0", lifespan=_lifespan)
 _origins = [o for o in settings.cors_origins.split(",") if o]
 if _origins:
     app.add_middleware(
