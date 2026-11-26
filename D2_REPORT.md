@@ -1,11 +1,46 @@
-# D2 report — tests-only round (guard workaround)
+# D2 report — backend registry (all review-round-1 fixes applied)
 
 Branch: `d2-backend-registry`, implementation commit `b8c8144` ("D2: input backend
-registry (InputBackend protocol, pypdfium2 + Pillow adapters)").
+registry (InputBackend protocol, pypdfium2 + Pillow adapters)"), then the
+LightVela review round 1 fixes (see `D2_FIX_REVIEW_REPORT.md` for the full list,
+commit history for the exact HEAD).
 
 ## Status
 
-- Baseline: **174 tests pass** (verified in the code round).
+- **198 tests pass** (24 in `tests/test_backends.py`), exit 0.
+- All brief-required items are implemented and on disk: `InputBackend`
+  protocol, `get_backend`, `UnsupportedInputError` with
+  `format`/`mime`/`supported`, `PypdfiumPdfBackend` and `PillowImageBackend`,
+  plus the deprecated alias `engine/preprocessing/io.py:_from_pdf`.
+- The equivalence test uses an **independent oracle**: the fixture PDF is
+  built with reportlab and the reference bitmaps are rendered with raw
+  pypdfium2 in the test, so Pillow never checks itself.
+- Review round 1 highlights: worker `_load_image` restored to the guarded
+  `load_input` path (H1); MIME precedence fixed to extension-wins (M1);
+  registry hardened (lazy defaults in `base.py`, protocol-validated
+  `register_backend`, `unregister_backend`/`clear_registry`, prepended new
+  backends) (M2); honest `page_count` on both backends (M3); `_from_pdf`
+  backward-compatible signature (M4); `.jpeg`, mixed-case, MIME-parameters,
+  corrupt/missing-file and GIF-frame test gaps filled (M5);
+  `PdfiumTextLayer.name = "pypdfium2"` (H4).
+
+## Checks (review-round-1 fix round, exit codes)
+
+- `pytest tests/ -q -p no:warnings` → exit 0, 198 passed, 0 failed.
+- `python -m benchmark.validate` → exit 0, 35 passed, 0 failed.
+- `ruff check .` → exit 0.
+- `mypy engine benchmark tests` → exit 0 (90 source files).
+- Live smoke on LV3: `uvicorn service.api.app:app`, real uploads to
+  `POST /v1/jobs` — PDF job `job_0c44eb6fa596` and PNG job
+  `job_fb0e8d8c9374` both completed (progress 100, error null).
+
+## History
+
+- Baseline at the time of the tests-only round: 174 tests; the 5 original
+  backend tests were placed by the liaison (26/11) and verified: 179 total,
+  `lv3.sh verify` green (validation eval F1 0.8, industrial eval routing 1.0 /
+  F1 0.933 / unit 0.875).
+- Branch NOT merged, per brief.
 - The 5 tests required by `mlai_d2_brief.md` are written in the fenced Python
   block below, but **NOT yet run**: `tests/test_backends.py` does not exist on
   disk yet because the environment guard refuses to create new test files. The

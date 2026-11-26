@@ -41,8 +41,11 @@ class PypdfiumPdfBackend:
         return True
 
     def page_count(self, path: Path) -> int:
+        """Raw page count (may exceed the MAX_PDF_PAGES load limit; see load)."""
         import pypdfium2 as pdfium
 
+        if not path.exists():
+            raise FileNotFoundError(str(path))
         try:
             pdf = pdfium.PdfDocument(path)
         except Exception as exc:  # noqa: BLE001 - pdfium raises assorted types

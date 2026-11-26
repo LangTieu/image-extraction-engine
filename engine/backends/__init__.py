@@ -5,9 +5,11 @@ from __future__ import annotations
 from engine.backends.base import (
     InputBackend,
     UnsupportedInputError,
+    clear_registry,
     get_backend,
     register_backend,
     registered_backends,
+    unregister_backend,
 )
 from engine.backends.image import PillowImageBackend
 from engine.backends.pdf_pypdfium2 import PypdfiumPdfBackend
@@ -17,18 +19,9 @@ __all__ = [
     "PillowImageBackend",
     "PypdfiumPdfBackend",
     "UnsupportedInputError",
+    "clear_registry",
     "get_backend",
     "register_backend",
     "registered_backends",
+    "unregister_backend",
 ]
-
-
-def _register_defaults() -> None:
-    from engine.backends.base import registered_backends
-
-    if not registered_backends():
-        register_backend(PypdfiumPdfBackend())
-        register_backend(PillowImageBackend())
-
-
-_register_defaults()

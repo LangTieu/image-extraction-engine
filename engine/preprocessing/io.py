@@ -27,9 +27,6 @@ MAX_PIXELS_PER_SIDE = 8000
 MAX_PDF_PAGES = 100
 DEFAULT_DPI = 300
 
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-PDF_EXTENSIONS = {".pdf"}
-
 
 @dataclass
 class LoadedImage:
@@ -55,8 +52,12 @@ def _check_limits(path: Path, size_bytes: int) -> None:
         raise InputLimitError(f"{path.name}: file is {size_bytes} bytes, limit is {MAX_FILE_BYTES}")
 
 
-def _from_pdf(path: Path, sha256: str, dpi: int) -> list[LoadedImage]:
-    """Deprecated alias: load a PDF through the pypdfium2 backend."""
+def _from_pdf(path: Path, sha256: str = "", dpi: int = DEFAULT_DPI) -> list[LoadedImage]:
+    """Deprecated alias: load a PDF through the pypdfium2 backend.
+
+    ``sha256`` is accepted for backwards compatibility and ignored: the
+    backend computes it itself.
+    """
     from engine.backends import PypdfiumPdfBackend
 
     return PypdfiumPdfBackend().load(path, dpi=dpi)
