@@ -58,41 +58,10 @@ def _check_limits(path: Path, size_bytes: int) -> None:
 
 
 def _from_pdf(path: Path, sha256: str, dpi: int) -> list[LoadedImage]:
-    import pypdfium2 as pdfium
+    """Deprecated alias: load a PDF through the pypdfium2 backend."""
+    from engine.backends import PypdfiumPdfBackend
 
-    try:
-        pdf = pdfium.PdfDocument(path)
-    except Exception as exc:  # noqa: BLE001 - pdfium raises assorted types
-        raise CorruptImageError(f"{path.name}: cannot open PDF ({exc})") from exc
-    try:
-        pages: list[LoadedImage] = []
-        count = min(len(pdf), MAX_PDF_PAGES)
-        if len(pdf) > MAX_PDF_PAGES:
-            raise InputLimitError(
-                f"{path.name}: PDF has {len(pdf)} pages, limit is {MAX_PDF_PAGES}"
-            )
-        scale = dpi / 72.0
-        for index in range(count):
-            page = pdf[index]
-            bitmap = page.render(scale=scale)
-            pil = bitmap.to_pil().convert("RGB")
-            if max(pil.size) > MAX_PIXELS_PER_SIDE:
-                raise InputLimitError(
-                    f"{path.name}: page {index} renders to {pil.size}, "
-                    f"limit is {MAX_PIXELS_PER_SIDE}px per side"
-                )
-            pages.append(
-                LoadedImage(
-                    data=np.asarray(pil, dtype=np.uint8),
-                    sha256=sha256,
-                    source_path=str(path),
-                    format="pdf",
-                    page=index,
-                )
-            )
-        return pages
-    finally:
-        pdf.close()
+    return PypdfiumPdfBackend().load(path, dpi=dpi)
 
 
 def load_input(path: str | Path, dpi: int = DEFAULT_DPI) -> list[LoadedImage]:
@@ -105,32 +74,6 @@ def load_input(path: str | Path, dpi: int = DEFAULT_DPI) -> list[LoadedImage]:
         raise SourceNotFoundError(str(source))
     _check_limits(source, source.stat().st_size)
 
-    suffix = source.suffix.lower()
-    sha256 = _sha256_of(source)
+    from engine.backends import get_backend  # lazy: avoids a circular import
 
-    if suffix in PDF_EXTENSIONS:
-        return _from_pdf(source, sha256, dpi)
-    if suffix not in IMAGE_EXTENSIONS:
-        raise UnsupportedFormatError(f"{source.name}: unsupported extension {suffix!r}")
-
-    try:
-        with Image.open(source) as handle:
-            handle.load()
-            pil = handle.convert("RGB")
-    except Exception as exc:  # noqa: BLE001 - Pillow raises assorted types
-        raise CorruptImageError(f"{source.name}: cannot decode image ({exc})") from exc
-
-    width, height = pil.size
-    if max(width, height) > MAX_PIXELS_PER_SIDE:
-        raise InputLimitError(
-            f"{source.name}: image is {width}x{height}, limit is {MAX_PIXELS_PER_SIDE}px per side"
-        )
-    return [
-        LoadedImage(
-            data=np.asarray(pil, dtype=np.uint8),
-            sha256=sha256,
-            source_path=str(source),
-            format="png" if suffix == ".png" else ("webp" if suffix == ".webp" else "jpg"),
-            page=None,
-        )
-    ]
+    return get_backend(source).load(source, dpi=dpi)

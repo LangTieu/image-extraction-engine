@@ -213,10 +213,11 @@ def _build_exports(
 
 
 def _load_image(path: Path):
-    from engine.preprocessing.io import load_input
+    from engine.backends import get_backend
+    from engine.preprocessing.io import DEFAULT_DPI
 
-    loaded = load_input(path)
-    return loaded[0].data
+    backend = get_backend(path)
+    return backend.load(path, dpi=DEFAULT_DPI)[0].data
 
 
 def _process_file(jf: JobFileModel, job: JobModel, token: str | None = None) -> None:
