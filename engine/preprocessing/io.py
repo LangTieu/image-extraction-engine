@@ -16,10 +16,8 @@ import numpy as np
 from PIL import Image
 
 from engine.preprocessing.errors import (
-    CorruptImageError,
     InputLimitError,
     SourceNotFoundError,
-    UnsupportedFormatError,
 )
 
 Image.MAX_IMAGE_PIXELS = 256_000_000  # decompression-bomb guard, above our own limit
