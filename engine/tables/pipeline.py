@@ -20,7 +20,7 @@ import numpy as np
 
 from engine.ocr.base import OCRToken
 from engine.ocr.multiscale import reocr_low_confidence
-from engine.schema import BBox, Table
+from engine.schema import BBox, Provenance, Table
 from engine.schema.models import ExtractionStatus
 from engine.tables.base import (
     TABLE_BACKENDS,
@@ -63,10 +63,15 @@ def _make_backend(name: str, config: TableConfig) -> TableBackend:
 def _map_bbox(bbox, log):
     if log is None:
         return None
-    corners = np.array([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], dtype=float)
+    # Map all four corners and take the true axis-aligned bounding box: under
+    # rotation/scale a TL/BR-only mapping can shrink the box.
+    corners = np.array(
+        [[bbox[0], bbox[1]], [bbox[2], bbox[1]], [bbox[2], bbox[3]], [bbox[0], bbox[3]]],
+        dtype=float,
+    )
     mapped = log.map_to_original(corners)
-    (ax0, ay0), (ax1, ay1) = mapped
-    return BBox(x0=min(ax0, ax1), y0=min(ay0, ay1), x1=max(ax0, ax1), y1=max(ay0, ay1))
+    xs, ys = mapped[:, 0], mapped[:, 1]
+    return BBox(x0=float(xs.min()), y0=float(ys.min()), x1=float(xs.max()), y1=float(ys.max()))
 
 
 class TablePipeline:
@@ -98,21 +103,32 @@ class TablePipeline:
                 used.append(grid.region.backend)
             table = grid_to_table(grid, tokens, table_name=table_name)
             if transform_log is not None and table.bbox is not None:
-                table.bbox = _map_bbox(
-                    (
-                        table.bbox.x0,
-                        table.bbox.y0,
-                        table.bbox.x1,
-                        table.bbox.y1,
-                    ),
-                    transform_log,
-                )
-                for cell in table.cells:
-                    if cell.bbox is not None:
-                        cell.bbox = _map_bbox(
-                            (cell.bbox.x0, cell.bbox.y0, cell.bbox.x1, cell.bbox.y1),
+                # Convention (see engine/schema/models.py): ``bbox`` stays in
+                # the producer's working-image coordinates; prov carries the
+                # box mapped back to original-image coordinates.
+                table.prov = [
+                    Provenance(
+                        bbox=_map_bbox(
+                            (
+                                table.bbox.x0,
+                                table.bbox.y0,
+                                table.bbox.x1,
+                                table.bbox.y1,
+                            ),
                             transform_log,
                         )
+                    )
+                ]
+                for cell in table.cells:
+                    if cell.bbox is not None:
+                        cell.prov = [
+                            Provenance(
+                                bbox=_map_bbox(
+                                    (cell.bbox.x0, cell.bbox.y0, cell.bbox.x1, cell.bbox.y1),
+                                    transform_log,
+                                )
+                            )
+                        ]
             if not table.columns:
                 warnings.append(f"table {table_name or ''}: no header row found")
             tables.append(table)

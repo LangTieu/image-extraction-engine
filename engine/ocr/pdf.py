@@ -60,6 +60,8 @@ class PdfiumTextLayer:
                             bbox=(left * scale, y0 * scale, right * scale, y1 * scale),
                             confidence=1.0,
                             language=None,
+                            page_index=index,
+                            scale=scale,
                         )
                     )
                 has_layer = len(tokens) >= self.min_chars
@@ -144,6 +146,8 @@ def _word_from(chars: list[OCRToken]) -> OCRToken:
         ),
         confidence=min(c.confidence for c in chars),
         language=chars[0].language,
+        page_index=chars[0].page_index,
+        scale=chars[0].scale,
     )
 
 

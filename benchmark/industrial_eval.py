@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from engine.industrial import IndustrialVision
+from engine.industrial.profiles import bundled_profiles
 from engine.schema import ExtractionResult
 
 
@@ -200,6 +201,41 @@ def evaluate_seed(seed_dir: Path) -> dict[str, object]:
     }
 
 
+def _degenerate_reasons(results: dict[str, object]) -> list[str]:
+    """Patterns that mean the run measured nothing (stale-JSON enabler).
+
+    Narrow by design: a legitimately low-but-real score must pass. Fails only
+    on (a) the exact collapsed signature seen in the stale-JSON round —
+    routing 0.5 with field F1 0.0 — and (b) any sample whose ground-truth
+    category is served by a bundled profile yet came back NO_PROFILE_MATCHED.
+    """
+    reasons: list[str] = []
+    routing = float(results["routing_accuracy"])  # type: ignore[arg-type]
+    f1 = float(results["field_f1"])  # type: ignore[arg-type]
+    if routing <= 0.5 + 1e-9 and f1 == 0.0:
+        reasons.append(
+            f"degenerate run: routing_accuracy={routing:.3f} with field_f1=0.000"
+        )
+    serving = {cat for p in bundled_profiles() for cat in p.categories}
+    per_set = results.get("per_set") or {}
+    assert isinstance(per_set, dict)
+    for group in per_set.values():
+        assert isinstance(group, dict)
+        samples = group.get("samples") or []
+        assert isinstance(samples, list)
+        for sample in samples:
+            assert isinstance(sample, dict)
+            warnings = sample.get("warnings") or []
+            if sample.get("gt_type") in serving and any(
+                "NO_PROFILE_MATCHED" in w for w in warnings
+            ):
+                reasons.append(
+                    f"degenerate run: {sample.get('sample')} (gt "
+                    f"{sample.get('gt_type')}) got NO_PROFILE_MATCHED"
+                )
+    return reasons
+
+
 def main(argv: list[str]) -> int:
     seed_dir = Path(argv[1]) if len(argv) > 1 else Path("benchmark/seed")
     out_path = Path(argv[2]) if len(argv) > 2 else Path("benchmark/results_industrial.json")
@@ -213,7 +249,10 @@ def main(argv: list[str]) -> int:
         f"f1={results['field_f1']:.3f} unit_acc={results['unit_accuracy']:.3f} "
         f"unknown_flagged={results['unknown_rate_flagged']:.3f} -> {out_path}"
     )
-    return 0
+    reasons = _degenerate_reasons(results)
+    for reason in reasons:
+        print(f"GATE FAIL: {reason}", file=sys.stderr)
+    return 1 if reasons else 0
 
 
 if __name__ == "__main__":

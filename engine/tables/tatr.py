@@ -153,11 +153,11 @@ class TATRBackend(TableBackend):
                 ),
             )
             for r in range(len(rows))  # rows are detected as bands: emit the last one too
-            for c in range(len(cols) - 1)
+            for c in range(len(cols))  # columns too: cover every cell incl. the last
         ]
         for box in spans:  # merged cells: mark the covered grid cells' extent
             self._mark_span(box, rows, cols, cells)
-        return CellGrid(region=region, n_rows=len(rows), n_cols=len(cols) - 1, cells=cells)
+        return CellGrid(region=region, n_rows=len(rows), n_cols=len(cols), cells=cells)
 
     @staticmethod
     def _mark_span(box, rows, cols, cells: list[CellBox]) -> None:

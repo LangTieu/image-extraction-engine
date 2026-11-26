@@ -5,7 +5,6 @@
 name: steel_coil_mill
 categories:
   - coil_table
-  - industrial_hmi
 title_cues:
   - COIL
   - VÒNG

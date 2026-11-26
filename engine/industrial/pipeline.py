@@ -28,7 +28,8 @@ from engine.industrial.regions import (
 from engine.industrial.screen import normalize_screen
 from engine.industrial.values import parse_value_unit
 from engine.ocr.base import OCRToken
-from engine.ocr.pipeline import GeneralOCR
+from engine.ocr.pipeline import GeneralOCR, _map_bbox
+from engine.preprocessing.mapping import TransformLog
 from engine.preprocessing.pipeline import PreprocessingPipeline
 from engine.schema import (
     BBox,
@@ -36,6 +37,7 @@ from engine.schema import (
     ExtractionStatus,
     FieldValue,
     ProcessingMeta,
+    Provenance,
     SourceInfo,
     Table,
     TextBlock,
@@ -129,8 +131,19 @@ class IndustrialVision:
 
         # One whole-frame OCR pass, shared by profile matching and (on the
         # generic-HMI fallback) text_blocks. Running recognize_image twice
-        # doubled the wall time for no extra information.
-        ocr_document = self._ocr.recognize_image(working) if self._ocr is not None else None
+        # would double OCR cost; the TransformLog handed to the OCR pipeline
+        # maps working-image coordinates back to the original photo, so every
+        # bbox_original / prov lands in original-image coordinates.
+        ocr_log = TransformLog()
+        if report.transform is not None:
+            # rectify maps original -> rectified; the log needs the inverse.
+            ocr_log.add("rectify", np.linalg.inv(report.transform))
+        ocr_log.add("enhance", pre.transform_log.homography)
+        ocr_document = (
+            self._ocr.recognize_image(working, transform_log=ocr_log)
+            if self._ocr is not None
+            else None
+        )
         profile_text = (
             " ".join(t.text for t in ocr_document.tokens) if ocr_document else shallow_text(working)
         )
@@ -139,9 +152,9 @@ class IndustrialVision:
             warnings.append("NO_PROFILE_MATCHED: falling back to generic industrial_hmi parsing")
 
         regions = detect_regions(working, model_hook=self.detector_hook)
-        tables = self._extract_coil_tables(working, profile, warnings)
-        fields = self._extract_fields(working, regions, profile)
-        alarm_entries = self._extract_alarms(working, regions)
+        tables = self._extract_coil_tables(working, profile, warnings, transform_log=ocr_log)
+        fields = self._extract_fields(working, regions, profile, transform_log=ocr_log)
+        alarm_entries = self._extract_alarms(working, regions, transform_log=ocr_log)
 
         # Generic-HMI fallback: heuristics found no typed regions (no
         # LABEL_VALUE etc.), so without this the OCR text discovered above
@@ -150,21 +163,45 @@ class IndustrialVision:
         # not repeated.
         text_blocks: list[TextBlock] = []
         if profile is None and ocr_document is not None:
-            for block in ocr_document.pages[0] if ocr_document.pages else []:
-                if not re.search(r"[A-Za-z0-9]", block.text):
-                    continue  # punctuation/noise-only lines from screen glare
-                text_blocks.append(
-                    TextBlock(
-                        text=block.text,
-                        bbox=BBox(
-                            x0=block.bbox[0], y0=block.bbox[1], x1=block.bbox[2], y1=block.bbox[3]
-                        )
-                        if block.bbox
-                        else None,
-                        reading_order=block.reading_order,
-                        confidence=block.confidence,
+            for page_blocks in ocr_document.pages:
+                for block in page_blocks:
+                    if not re.search(r"[A-Za-z0-9]", block.text):
+                        continue  # punctuation/noise-only lines from screen glare
+                    prov_bbox = block.bbox_original or block.bbox
+                    # Prefer the provenance the OCR producer attached (page +
+                    # scale from the real tokens); fall back to a local build.
+                    prov = block.prov or (
+                        [
+                            Provenance(
+                                page=block.page_index,
+                                bbox=BBox(
+                                    x0=prov_bbox[0],
+                                    y0=prov_bbox[1],
+                                    x1=prov_bbox[2],
+                                    y1=prov_bbox[3],
+                                ),
+                                scale=block.scale,
+                            )
+                        ]
+                        if prov_bbox
+                        else []
                     )
-                )
+                    text_blocks.append(
+                        TextBlock(
+                            text=block.text,
+                            bbox=BBox(
+                                x0=block.bbox[0],
+                                y0=block.bbox[1],
+                                x1=block.bbox[2],
+                                y1=block.bbox[3],
+                            )
+                            if block.bbox
+                            else None,
+                            reading_order=block.reading_order,
+                            confidence=block.confidence,
+                            prov=prov,
+                        )
+                    )
 
         # A row-level note repeats for every data row (one per unmapped
         # header cell); the same warning text belongs in the result once.
@@ -232,7 +269,12 @@ class IndustrialVision:
     # -- internal steps -----------------------------------------------------
 
     def _ocr_text_shallow(self, image: np.ndarray) -> str:
-        """Cheap whole-frame OCR used only for profile matching."""
+        """Cheap whole-frame OCR used only for profile matching.
+
+        No transform_log is passed and none is needed: the tokens here are
+        consumed as a text bag for profile cues and are never attached to any
+        bbox/prov, so they cannot mislabel provenance.
+        """
         if self._ocr is None:
             return shallow_text(image)
         result = self._ocr.recognize_image(image)
@@ -243,6 +285,8 @@ class IndustrialVision:
         image: np.ndarray,
         profile: IndustrialProfile | None,
         warnings: list[str],
+        *,
+        transform_log: TransformLog | None = None,
     ) -> list[Table]:
         """Read table-structured regions into unified-schema Tables."""
         from engine.industrial.coil_table import map_row, rows_to_table, validate_cells
@@ -254,7 +298,8 @@ class IndustrialVision:
             if region.type is not RegionType.TABLE:
                 continue
             crop = _crop(image, region.bbox)
-            headers, rows, row_alts = self._read_grid(crop)
+            cell_boxes: list[list[tuple]] | None
+            headers, rows, row_alts, cell_boxes = self._read_grid(crop)
             if profile is not None:
                 # The first grid row is often a toolbar strip above the real
                 # table: pick the row that best matches the profile's column
@@ -265,12 +310,14 @@ class IndustrialVision:
                 # keep O/0 straight).
                 types = [_field_type(profile, h) for h in headers]
                 if header_index or any(types):
-                    headers, rows, row_alts = self._read_grid(
+                    headers, rows, row_alts, cell_boxes = self._read_grid(
                         crop, field_types=types or None, header_index=header_index
                     )
             if not headers or not rows:
                 continue
-            headers, rows, row_alts = _drop_noise_columns(headers, rows, row_alts)
+            headers, rows, row_alts, cell_boxes = _drop_noise_columns(
+                headers, rows, row_alts, cell_boxes
+            )
             if not headers or not rows:
                 continue
             schemas = profile.table_schemas or {}
@@ -309,6 +356,19 @@ class IndustrialVision:
                     profile,
                     bbox=region.bbox,
                     resolve_headers=False,
+                    transform_log=transform_log,
+                    cell_bboxes=[
+                        [
+                            (
+                                b[0] + region.bbox[0],
+                                b[1] + region.bbox[1],
+                                b[2] + region.bbox[0],
+                                b[3] + region.bbox[1],
+                            )
+                            for b in row_boxes
+                        ]
+                        for row_boxes in (cell_boxes or [])
+                    ],
                 )
             )
         return tables
@@ -319,15 +379,16 @@ class IndustrialVision:
         *,
         field_types: list[str | None] | None = None,
         header_index: int = 0,
-    ) -> tuple[list[str], list[list[str]], list[dict[int, list[str]]]]:
+    ) -> tuple[list[str], list[list[str]], list[dict[int, list[str]]], list[list[tuple]]]:
         """Read a cropped table as header + row strings (region-grid OCR).
 
         ``header_index`` is the grid row that carries the real column headers:
         HMI screenshots often include toolbar rows above the table, so the
         first detected grid row is not always the header.
 
-        Returns headers, rows (grid rows after the header) and per-row
-        {col_index: ocr_alternatives}.
+        Returns headers, rows (grid rows after the header), per-row
+        {col_index: ocr_alternatives} and per-row cell bboxes (crop
+        coordinates, aligned [header row] + data rows).
         """
         import cv2
 
@@ -347,19 +408,22 @@ class IndustrialVision:
         hlines = _line_positions(line_fg.mean(axis=1) / 255.0, min_coverage=0.3)
         vlines = _line_positions(line_fg.mean(axis=0) / 255.0, min_coverage=0.3)
         if len(hlines) < 2 or len(vlines) < 2:
-            return [], [], []
+            return [], [], [], []
         rows: list[list[str]] = []
         alts: list[dict[int, list[str]]] = []
+        boxes: list[list[tuple]] = []
         row_index = -1
         for top, bottom in zip(hlines, hlines[1:]):
             if bottom - top < 8:  # the line stroke itself, not a cell row
                 continue
             row_index += 1
             cells_text: list[str] = []
+            cell_boxes: list[tuple] = []
             row_alts: dict[int, list[str]] = {}
             for col_index, (left, right) in enumerate(zip(vlines, vlines[1:])):
                 if right - left < 8:
                     continue
+                cell_boxes.append((left, top, right, bottom))
                 cell = crop[top + 2 : bottom - 2, left + 2 : right - 2]
                 # Whitelists (digit-only etc.) apply to data cells only —
                 # applying them to the header row strips its letters.
@@ -376,19 +440,22 @@ class IndustrialVision:
                     row_alts[col_index] = reading.alternatives
             rows.append(cells_text)
             alts.append(row_alts)
+            boxes.append(cell_boxes)
         if not rows:
-            return [], [], []
+            return [], [], [], []
         # Keep positional alignment: an empty header cell stays as a
         # placeholder so data-column indices still line up with `headers`.
         header_index = min(max(header_index, 0), len(rows) - 1)
         headers = rows[header_index]
-        return headers, rows[header_index + 1 :], alts[header_index + 1 :]
+        return headers, rows[header_index + 1 :], alts[header_index + 1 :], boxes[header_index:]
 
     def _extract_fields(
         self,
         image: np.ndarray,
         regions: list[Region],
         profile: IndustrialProfile | None,
+        *,
+        transform_log: TransformLog | None = None,
     ) -> list[FieldValue]:
         fields: list[FieldValue] = []
         for region in regions:
@@ -437,13 +504,14 @@ class IndustrialVision:
                             x1=region.bbox[2],
                             y1=region.bbox[3],
                         ),
+                        prov=_prov_for_bbox(region.bbox, transform_log),
                         needs_review=bool(review_notes or reading.flags or format_problems),
                     )
                 )
         return fields
 
     def _extract_alarms(
-        self, image: np.ndarray, regions: list[Region]
+        self, image: np.ndarray, regions: list[Region], transform_log=None
     ) -> list[alarm_mod.AlarmEntry]:
         entries: list[alarm_mod.AlarmEntry] = []
         for region in regions:
@@ -454,6 +522,7 @@ class IndustrialVision:
             token = OCRToken(text=reading.text, bbox=region.bbox, confidence=reading.confidence)
             entry = alarm_mod.parse_alarm_row([token], banner_color=region.color)
             if entry is not None:
+                entry.prov = _prov_for_bbox(region.bbox, transform_log)
                 entries.append(entry)
         return entries
 
@@ -476,6 +545,20 @@ class IndustrialVision:
             "severity": entry.severity,
             "color": entry.color,
             "flags": entry.flags,
+            "prov": [
+                {
+                    "page": p.page,
+                    "scale": p.scale,
+                    "coord_space": p.coord_space,
+                    "unit": p.unit,
+                    "bbox": (
+                        None
+                        if p.bbox is None
+                        else [p.bbox.x0, p.bbox.y0, p.bbox.x1, p.bbox.y1]
+                    ),
+                }
+                for p in (entry.prov or [])
+            ],
         }
 
 
@@ -529,7 +612,8 @@ def _drop_noise_columns(
     headers: list[str],
     rows: list[list[str]],
     row_alts: list[dict[int, list[str]]],
-) -> tuple[list[str], list[list[str]], list[dict[int, list[str]]]]:
+    cell_boxes: list[list[tuple]] | None = None,
+) -> tuple[list[str], list[list[str]], list[dict[int, list[str]]], list[list[tuple]] | None]:
     """Drop gutter/noise columns left of the real table.
 
     A column is noise when (nearly) all of its data cells carry no
@@ -538,7 +622,7 @@ def _drop_noise_columns(
     contain digits.
     """
     if not rows or not headers:
-        return headers, rows, row_alts
+        return headers, rows, row_alts, cell_boxes
     keep: list[int] = []
     for col in range(len(headers)):
         cells = [row[col] if col < len(row) else "" for row in rows]
@@ -546,17 +630,21 @@ def _drop_noise_columns(
         if alnum >= 0.25 * len(cells):
             keep.append(col)
     if len(keep) == len(headers):
-        return headers, rows, row_alts
+        return headers, rows, row_alts, cell_boxes
     keep_set = set(keep)
     headers = [headers[col] for col in keep]
     rows = [[row[col] for col in keep if col < len(row)] for row in rows]
+    if cell_boxes is not None:
+        cell_boxes = [
+            [b for i, b in enumerate(row_boxes) if i in keep_set] for row_boxes in cell_boxes
+        ]
     row_alts = [
         {new_col: v for new_col, (col, v) in enumerate(
             (col, v) for col, v in alts.items() if col in keep_set
         )}
         for alts in row_alts
     ]
-    return headers, rows, row_alts
+    return headers, rows, row_alts, cell_boxes
 
 
 def _line_positions(profile: np.ndarray, *, min_coverage: float) -> list[int]:
@@ -572,6 +660,32 @@ def _line_positions(profile: np.ndarray, *, min_coverage: float) -> list[int]:
     if start is not None:
         bands.append((start, len(profile)))
     return [(a + b) // 2 for a, b in bands]
+
+
+def _prov_for_bbox(
+    bbox: tuple[float, float, float, float],
+    transform_log: TransformLog | None,
+) -> list[Provenance]:
+    """Provenance for one node bbox, in original-image coordinates.
+
+    ``bbox`` stays in processed (working-image) coordinates, like
+    text_blocks; prov carries the same box mapped through the
+    TransformLog back to the source photo.
+    """
+    src = bbox
+    if transform_log is not None:
+        src = _map_bbox(bbox, transform_log)
+    return [
+        Provenance(
+            # Single-image path: 0-based page 0 and scale 1.0, matching the
+            # coil_table producers (engine/industrial/coil_table.py) so every
+            # FieldValue.prov carries the same page/scale meta as TextBlock
+            # and Table/Cell provenance.
+            page=0,
+            scale=1.0,
+            bbox=BBox(x0=src[0], y0=src[1], x1=src[2], y1=src[3]),
+        )
+    ]
 
 
 def _crop(image: np.ndarray, bbox: tuple[float, float, float, float]) -> np.ndarray:

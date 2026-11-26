@@ -24,15 +24,21 @@ from engine.ocr.base import OCREngine, OCRResult, OCRToken
 from engine.ocr.multiscale import reocr_low_confidence
 from engine.ocr.pdf import PageText, extract_pdf_pages
 from engine.ocr.reading_order import TextBlock, blocks_to_text, tokens_to_blocks
+from engine.schema.models import BBox, Provenance
 
 
 def _map_bbox(bbox, log) -> tuple[float, float, float, float]:
     if log is None:
         return bbox
-    corners = np.array([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], dtype=float)
+    # Map all four corners and take the true axis-aligned bounding box: under
+    # rotation/scale a TL/BR-only mapping can shrink the box.
+    corners = np.array(
+        [[bbox[0], bbox[1]], [bbox[2], bbox[1]], [bbox[2], bbox[3]], [bbox[0], bbox[3]]],
+        dtype=float,
+    )
     mapped = log.map_to_original(corners)
-    (ax0, ay0), (ax1, ay1) = mapped
-    return (min(ax0, ax1), min(ay0, ay1), max(ax0, ax1), max(ay0, ay1))
+    xs, ys = mapped[:, 0], mapped[:, 1]
+    return (float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max()))
 
 
 @dataclass
@@ -68,6 +74,10 @@ class GeneralOCR:
     def recognize_image(self, image: np.ndarray, *, transform_log=None) -> OCRDocument:
         t0 = time.perf_counter()
         result = self._run_chain(image)
+        for t in result.tokens:
+            # Single raster input: one page, rendered 1:1 (no PDF DPI scaling).
+            t.page_index = 0
+            t.scale = 1.0
         blocks = tokens_to_blocks(result.tokens)
         doc = OCRDocument(
             pages=[blocks],
@@ -77,6 +87,8 @@ class GeneralOCR:
         )
         if transform_log is not None:
             doc = _with_original_coords(doc, transform_log)
+        for page in doc.pages:
+            _attach_prov(page)
         return doc
 
     def _run_chain(self, image: np.ndarray) -> OCRResult:
@@ -105,6 +117,9 @@ class GeneralOCR:
             else:
                 assert page.render is not None
                 result = self._run_chain(page.render)
+                for t in result.tokens:
+                    t.page_index = page.page_index
+                    t.scale = page.dpi / 72.0
                 if result.engine and result.engine not in engines_used:
                     engines_used.append(result.engine)
                 blocks = tokens_to_blocks(result.tokens)
@@ -118,6 +133,8 @@ class GeneralOCR:
         )
         if transform_log is not None:
             doc = _with_original_coords(doc, transform_log)
+        for blocks_page in doc.pages:
+            _attach_prov(blocks_page)
         return doc
 
 
@@ -125,9 +142,28 @@ def _with_original_coords(doc: OCRDocument, log) -> OCRDocument:
     """Attach bbox_original to every token and block via the TransformLog."""
     for page in doc.pages:
         for block in page:
-            block.bbox_original = _map_bbox(block.bbox, log)  # type: ignore[attr-defined]
+            block.bbox_original = _map_bbox(block.bbox, log)
             for token in block.tokens:
-                token.bbox_original = _map_bbox(token.bbox, log)  # type: ignore[attr-defined]
+                token.bbox_original = _map_bbox(token.bbox, log)
     for token in doc.tokens:
-        token.bbox_original = _map_bbox(token.bbox, log)  # type: ignore[attr-defined]
+        token.bbox_original = _map_bbox(token.bbox, log)
     return doc
+
+
+def _attach_prov(blocks: list[TextBlock]) -> None:
+    """Fill each block's provenance from real source position (producer side).
+
+    ``bbox_original`` wins (source coordinates) and falls back to the
+    processed bbox when no TransformLog was supplied (identical geometry).
+    """
+    for block in blocks:
+        if block.prov:
+            continue
+        src = block.bbox_original or block.bbox
+        block.prov = [
+            Provenance(
+                page=block.page_index,
+                bbox=BBox(x0=src[0], y0=src[1], x1=src[2], y1=src[3]),
+                scale=block.scale,
+            )
+        ]
